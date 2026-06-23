@@ -17,23 +17,43 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@gardening/shared';
 import {
+  buildVarietyDisplayName,
   createJournalEntry,
   createPlacement,
+  DEFAULT_PLANT_MAP_FILTERS,
   deletePlacement,
+  filterPlacements,
+  findCatalogVariety,
+  gardenCenter,
   listPlantCatalog,
+  listPlantCatalogVarieties,
   listPlacements,
+  listReminders,
   searchAddress,
   updatePlacement,
+  type CareFilter,
   type GardenPlacement,
+  type GardenReminder,
   type GeocodeResult,
   type PlantCatalogEntry,
+  type PlantCatalogVariety,
+  type PlantMapFilters,
 } from '@gardening/shared';
 import '@/lib/mapbox';
 import { getMapboxAccessToken, isMapboxConfigured } from '@/lib/mapbox';
+import { GardenWeather } from '@/components/GardenWeather';
+import { PlantVarietyPicker } from '@/components/PlantVarietyPicker';
 
 const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
 const DEFAULT_CENTER: [number, number] = [-122.4194, 37.7749];
 const MAP_ZOOM = 18;
+
+const CARE_OPTIONS: { value: CareFilter; label: string }[] = [
+  { value: 'all', label: 'All care status' },
+  { value: 'overdue', label: 'Overdue care' },
+  { value: 'due_soon', label: 'Due soon (2 days)' },
+  { value: 'no_reminders', label: 'No reminders' },
+];
 
 type PendingPin = { latitude: number; longitude: number };
 
@@ -53,14 +73,30 @@ export default function MapScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [catalog, setCatalog] = useState<PlantCatalogEntry[]>([]);
+  const [catalogVarieties, setCatalogVarieties] = useState<PlantCatalogVariety[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
+  const [selectedVarietyId, setSelectedVarietyId] = useState<string | null>(null);
   const [addressQuery, setAddressQuery] = useState('');
   const [addressResults, setAddressResults] = useState<GeocodeResult[]>([]);
   const [addressSearching, setAddressSearching] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [showAddressResults, setShowAddressResults] = useState(false);
   const [showPlantList, setShowPlantList] = useState(false);
+  const [reminders, setReminders] = useState<GardenReminder[]>([]);
+  const [mapFilters, setMapFilters] = useState<PlantMapFilters>(DEFAULT_PLANT_MAP_FILTERS);
+  const [compactMarkers, setCompactMarkers] = useState(false);
+
+  const filteredPlacements = useMemo(
+    () => filterPlacements(placements, mapFilters, reminders),
+    [placements, mapFilters, reminders]
+  );
+
+  const weatherLocation = useMemo(() => {
+    const garden = gardenCenter(placements);
+    if (garden) return garden;
+    return { latitude: center[1], longitude: center[0] };
+  }, [placements, center]);
 
   const selectedPlacement = useMemo(
     () => placements.find((p) => p.id === selectedId) ?? null,
@@ -91,14 +127,22 @@ export default function MapScreen() {
     if (!user) return;
     setLoading(true);
     setError(null);
-    const { data, error: listError } = await listPlacements(supabase, user.id);
-    if (listError) {
-      setError(listError);
+    const [placementsResult, remindersResult] = await Promise.all([
+      listPlacements(supabase, user.id),
+      listReminders(supabase, user.id),
+    ]);
+    if (placementsResult.error) {
+      setError(placementsResult.error);
     } else {
-      setPlacements(data);
-      if (data.length > 0) {
-        flyTo(data[0].longitude, data[0].latitude, false);
+      setPlacements(placementsResult.data);
+      if (placementsResult.data.length > 0) {
+        flyTo(placementsResult.data[0].longitude, placementsResult.data[0].latitude, false);
       }
+    }
+    if (remindersResult.error) {
+      setError(remindersResult.error);
+    } else {
+      setReminders(remindersResult.data);
     }
     setLoading(false);
   }, [supabase, user, flyTo]);
@@ -106,8 +150,12 @@ export default function MapScreen() {
   useEffect(() => {
     void loadPlacements();
     void (async () => {
-      const { data } = await listPlantCatalog(supabase);
-      setCatalog(data);
+      const [catalogResult, varietiesResult] = await Promise.all([
+        listPlantCatalog(supabase),
+        listPlantCatalogVarieties(supabase),
+      ]);
+      setCatalog(catalogResult.data);
+      setCatalogVarieties(varietiesResult.data);
     })();
   }, [loadPlacements, supabase]);
 
@@ -123,6 +171,7 @@ export default function MapScreen() {
   const openNewPinModal = (latitude: number, longitude: number) => {
     setSelectedId(null);
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
     setPendingPin({ latitude, longitude });
     setPlantName('');
@@ -135,6 +184,7 @@ export default function MapScreen() {
     setSelectedId(placement.id);
     setPlantName(placement.name);
     setSelectedCatalogId(placement.plant_catalog_id ?? null);
+    setSelectedVarietyId(placement.plant_catalog_variety_id ?? null);
     setCatalogSearch('');
     setModalVisible(true);
     setShowPlantList(false);
@@ -154,17 +204,32 @@ export default function MapScreen() {
     setSelectedId(null);
     setPlantName('');
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
   };
 
   const selectCatalogEntry = (entry: PlantCatalogEntry) => {
     setSelectedCatalogId(entry.id);
+    setSelectedVarietyId(null);
     setPlantName(entry.common_name);
     setCatalogSearch(entry.common_name);
   };
 
+  const selectVariety = (variety: PlantCatalogVariety | null) => {
+    if (!variety || !selectedCatalogEntry) {
+      setSelectedVarietyId(null);
+      if (selectedCatalogEntry) {
+        setPlantName(selectedCatalogEntry.common_name);
+      }
+      return;
+    }
+    setSelectedVarietyId(variety.id);
+    setPlantName(buildVarietyDisplayName(selectedCatalogEntry, variety));
+  };
+
   const clearCatalogSelection = () => {
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
   };
 
@@ -211,6 +276,7 @@ export default function MapScreen() {
         latitude: pendingPin.latitude,
         longitude: pendingPin.longitude,
         plant_catalog_id: selectedCatalogId,
+        plant_catalog_variety_id: selectedVarietyId,
       });
       setSaving(false);
       if (createError) {
@@ -233,6 +299,7 @@ export default function MapScreen() {
       const { data, error: updateError } = await updatePlacement(supabase, selectedPlacement.id, {
         name: plantName.trim(),
         plant_catalog_id: selectedCatalogId,
+        plant_catalog_variety_id: selectedVarietyId,
       });
       setSaving(false);
       if (updateError) {
@@ -355,21 +422,30 @@ export default function MapScreen() {
             centerCoordinate={center}
             animationDuration={cameraAnimation}
           />
-          {placements.map((placement) => (
+          {filteredPlacements.map((placement) => (
             <PointAnnotation
               key={placement.id}
               id={placement.id}
               coordinate={[placement.longitude, placement.latitude]}
               onSelected={() => openEditModal(placement)}
             >
-              <View
-                style={[
-                  styles.marker,
-                  selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
-                ]}
-              >
-                <Text style={styles.markerText}>{placement.name}</Text>
-              </View>
+              {compactMarkers ? (
+                <View
+                  style={[
+                    styles.markerDot,
+                    selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.marker,
+                    selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
+                  ]}
+                >
+                  <Text style={styles.markerText}>{placement.name}</Text>
+                </View>
+              )}
             </PointAnnotation>
           ))}
           {pendingPin ? (
@@ -381,6 +457,25 @@ export default function MapScreen() {
             </PointAnnotation>
           ) : null}
         </MapView>
+
+        <View style={styles.weatherOverlay}>
+          <GardenWeather
+            latitude={weatherLocation.latitude}
+            longitude={weatherLocation.longitude}
+            compact
+          />
+        </View>
+
+        <Pressable
+          style={styles.compactMarkersToggle}
+          onPress={() => setCompactMarkers((value) => !value)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: compactMarkers }}
+        >
+          <Text style={styles.compactMarkersToggleText}>
+            {compactMarkers ? 'Show names' : 'Dots only'}
+          </Text>
+        </Pressable>
 
         <Pressable
           style={styles.plantListToggle}
@@ -394,10 +489,71 @@ export default function MapScreen() {
         {showPlantList ? (
           <View style={styles.plantListPanel}>
             <ScrollView keyboardShouldPersistTaps="handled">
+              <GardenWeather
+                latitude={weatherLocation.latitude}
+                longitude={weatherLocation.longitude}
+              />
+              <Text style={styles.filterHeading}>
+                Filter plants ({filteredPlacements.length} of {placements.length})
+              </Text>
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Search by name..."
+                placeholderTextColor="#6b7280"
+                value={mapFilters.search}
+                onChangeText={(text) => setMapFilters((prev) => ({ ...prev, search: text }))}
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterChips}>
+                <Pressable
+                  style={[
+                    styles.filterChip,
+                    mapFilters.catalogCustomOnly && styles.filterChipActive,
+                  ]}
+                  onPress={() =>
+                    setMapFilters((prev) => ({
+                      ...prev,
+                      catalogCustomOnly: !prev.catalogCustomOnly,
+                      catalogId: null,
+                    }))
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      mapFilters.catalogCustomOnly && styles.filterChipTextActive,
+                    ]}
+                  >
+                    Custom only
+                  </Text>
+                </Pressable>
+                {CARE_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option.value}
+                    style={[
+                      styles.filterChip,
+                      mapFilters.care === option.value && styles.filterChipActive,
+                    ]}
+                    onPress={() =>
+                      setMapFilters((prev) => ({ ...prev, care: option.value }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        mapFilters.care === option.value && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
               {placements.length === 0 ? (
                 <Text style={styles.plantListEmpty}>Tap the map to add your first plant.</Text>
+              ) : filteredPlacements.length === 0 ? (
+                <Text style={styles.plantListEmpty}>No plants match these filters.</Text>
               ) : (
-                placements.map((placement) => (
+                filteredPlacements.map((placement) => (
                   <View key={placement.id} style={styles.plantListRow}>
                     <Pressable
                       style={[
@@ -500,6 +656,13 @@ export default function MapScreen() {
                 </View>
               ) : null}
 
+              <PlantVarietyPicker
+                catalogEntry={selectedCatalogEntry}
+                varieties={catalogVarieties}
+                selectedVarietyId={selectedVarietyId}
+                onSelectVariety={selectVariety}
+              />
+
               <Text style={styles.fieldLabel}>Display name</Text>
               <TextInput
                 style={styles.input}
@@ -509,7 +672,14 @@ export default function MapScreen() {
                 onChangeText={(text) => {
                   setPlantName(text);
                   if (selectedCatalogId && text !== selectedCatalogEntry?.common_name) {
+                    const variety = findCatalogVariety(catalogVarieties, selectedVarietyId);
+                    const expected =
+                      selectedCatalogEntry && variety
+                        ? buildVarietyDisplayName(selectedCatalogEntry, variety)
+                        : null;
+                    if (expected && text === expected) return;
                     setSelectedCatalogId(null);
+                    setSelectedVarietyId(null);
                   }
                 }}
               />
@@ -570,6 +740,28 @@ const styles = StyleSheet.create({
   signOut: { color: '#059669', fontSize: 14 },
   mapWrapper: { flex: 1, position: 'relative' },
   map: { flex: 1 },
+  weatherOverlay: {
+    position: 'absolute',
+    top: 88,
+    right: 12,
+    zIndex: 10,
+    maxWidth: 220,
+  },
+  compactMarkersToggle: {
+    position: 'absolute',
+    top: 88,
+    left: 12,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  compactMarkersToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
   addressSearchWrap: {
     position: 'absolute',
     top: 12,
@@ -628,6 +820,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  markerDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   markerDefault: { backgroundColor: '#10b981' },
   markerSelected: { backgroundColor: '#047857' },
   markerPending: {
@@ -664,7 +863,7 @@ const styles = StyleSheet.create({
     bottom: 56,
     left: 12,
     right: 12,
-    maxHeight: 220,
+    maxHeight: 320,
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 8,
@@ -673,6 +872,39 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  filterHeading: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#064e3b',
+    marginBottom: 8,
+  },
+  filterInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+  },
+  filterChips: { marginBottom: 8 },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  filterChipActive: {
+    borderColor: '#10b981',
+    backgroundColor: '#ecfdf5',
+  },
+  filterChipText: { fontSize: 12, color: '#374151' },
+  filterChipTextActive: { color: '#047857', fontWeight: '600' },
   plantListEmpty: { padding: 12, fontSize: 13, color: '#6b7280', textAlign: 'center' },
   plantListRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   plantListItem: {

@@ -56,7 +56,7 @@ cd gardening-app && npm start
 
 ## Phase 2
 
-- Reference `plant_catalog` table with 50 plants (light, water, companions, NE climate notes)
+- Reference `plant_catalog` table with 100 plants (light, water, companions, NE climate notes)
 - Optional `plant_catalog_id` link on map pins — custom names still supported
 - Catalog search when adding or editing plants (web + mobile)
 - **Plant journal** per pin: planted, watered, fertilized, fungicide, insecticide, budding, fruiting, harvest, pruning, transplant, notes

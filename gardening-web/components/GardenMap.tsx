@@ -5,18 +5,31 @@ import Link from 'next/link';
 import Map, { Marker, type MapMouseEvent } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
+  buildVarietyDisplayName,
   createJournalEntry,
   createPlacement,
+  DEFAULT_PLANT_MAP_FILTERS,
   deletePlacement,
+  filterPlacements,
+  findCatalogVariety,
+  gardenCenter,
   listPlantCatalog,
+  listPlantCatalogVarieties,
   listPlacements,
+  listReminders,
   updatePlacement,
   useAuth,
   type GardenPlacement,
+  type GardenReminder,
   type PlantCatalogEntry,
+  type PlantCatalogVariety,
+  type PlantMapFilters,
 } from '@gardening/shared';
 import { searchAddress, type GeocodeResult } from '@/lib/mapboxGeocode';
 import { PlantCatalogDetails, PlantCatalogPicker } from '@/components/PlantCatalogPicker';
+import { PlantVarietyPicker } from '@/components/PlantVarietyPicker';
+import { GardenWeather } from '@/components/GardenWeather';
+import { PlantMapFiltersPanel } from '@/components/PlantMapFilters';
 
 const DEFAULT_CENTER = { latitude: 37.7749, longitude: -122.4194 };
 const SEARCH_ZOOM = 18;
@@ -45,8 +58,24 @@ export default function GardenMap() {
   const [addressError, setAddressError] = useState<string | null>(null);
   const [showAddressResults, setShowAddressResults] = useState(false);
   const [catalog, setCatalog] = useState<PlantCatalogEntry[]>([]);
+  const [catalogVarieties, setCatalogVarieties] = useState<PlantCatalogVariety[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
+  const [selectedVarietyId, setSelectedVarietyId] = useState<string | null>(null);
+  const [reminders, setReminders] = useState<GardenReminder[]>([]);
+  const [mapFilters, setMapFilters] = useState<PlantMapFilters>(DEFAULT_PLANT_MAP_FILTERS);
+  const [compactMarkers, setCompactMarkers] = useState(false);
+
+  const filteredPlacements = useMemo(
+    () => filterPlacements(placements, mapFilters, reminders),
+    [placements, mapFilters, reminders]
+  );
+
+  const weatherLocation = useMemo(() => {
+    const center = gardenCenter(placements);
+    if (center) return center;
+    return { latitude: viewState.latitude, longitude: viewState.longitude };
+  }, [placements, viewState.latitude, viewState.longitude]);
 
   const selectedPlacement = useMemo(
     () => placements.find((p) => p.id === selectedId) ?? null,
@@ -59,11 +88,19 @@ export default function GardenMap() {
   }, [catalog, selectedCatalogId]);
 
   const loadCatalog = useCallback(async () => {
-    const { data, error: catalogError } = await listPlantCatalog(supabase);
-    if (catalogError) {
-      setError(catalogError);
+    const [catalogResult, varietiesResult] = await Promise.all([
+      listPlantCatalog(supabase),
+      listPlantCatalogVarieties(supabase),
+    ]);
+    if (catalogResult.error) {
+      setError(catalogResult.error);
     } else {
-      setCatalog(data);
+      setCatalog(catalogResult.data);
+    }
+    if (varietiesResult.error) {
+      setError(varietiesResult.error);
+    } else {
+      setCatalogVarieties(varietiesResult.data);
     }
   }, [supabase]);
 
@@ -71,18 +108,26 @@ export default function GardenMap() {
     if (!user) return;
     setLoading(true);
     setError(null);
-    const { data, error: listError } = await listPlacements(supabase, user.id);
-    if (listError) {
-      setError(listError);
+    const [placementsResult, remindersResult] = await Promise.all([
+      listPlacements(supabase, user.id),
+      listReminders(supabase, user.id),
+    ]);
+    if (placementsResult.error) {
+      setError(placementsResult.error);
     } else {
-      setPlacements(data);
-      if (data.length > 0) {
+      setPlacements(placementsResult.data);
+      if (placementsResult.data.length > 0) {
         setViewState((prev) => ({
           ...prev,
-          latitude: data[0].latitude,
-          longitude: data[0].longitude,
+          latitude: placementsResult.data[0].latitude,
+          longitude: placementsResult.data[0].longitude,
         }));
       }
+    }
+    if (remindersResult.error) {
+      setError(remindersResult.error);
+    } else {
+      setReminders(remindersResult.data);
     }
     setLoading(false);
   }, [supabase, user]);
@@ -112,6 +157,7 @@ export default function GardenMap() {
   const handleMapClick = (event: MapMouseEvent) => {
     setSelectedId(null);
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
     setPendingPin({
       latitude: event.lngLat.lat,
@@ -122,12 +168,26 @@ export default function GardenMap() {
 
   const selectCatalogEntry = (entry: PlantCatalogEntry) => {
     setSelectedCatalogId(entry.id);
+    setSelectedVarietyId(null);
     setPlantName(entry.common_name);
     setCatalogSearch(entry.common_name);
   };
 
+  const selectVariety = (variety: PlantCatalogVariety | null) => {
+    if (!variety || !selectedCatalogEntry) {
+      setSelectedVarietyId(null);
+      if (selectedCatalogEntry) {
+        setPlantName(selectedCatalogEntry.common_name);
+      }
+      return;
+    }
+    setSelectedVarietyId(variety.id);
+    setPlantName(buildVarietyDisplayName(selectedCatalogEntry, variety));
+  };
+
   const clearCatalogSelection = () => {
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
   };
 
@@ -140,6 +200,7 @@ export default function GardenMap() {
       latitude: pendingPin.latitude,
       longitude: pendingPin.longitude,
       plant_catalog_id: selectedCatalogId,
+      plant_catalog_variety_id: selectedVarietyId,
     });
     setSaving(false);
     if (createError) {
@@ -158,6 +219,7 @@ export default function GardenMap() {
     setPendingPin(null);
     setPlantName('');
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
   };
 
@@ -168,6 +230,7 @@ export default function GardenMap() {
     const { data, error: updateError } = await updatePlacement(supabase, selectedPlacement.id, {
       name: plantName.trim(),
       plant_catalog_id: selectedCatalogId,
+      plant_catalog_variety_id: selectedVarietyId,
     });
     setSaving(false);
     if (updateError) {
@@ -193,6 +256,7 @@ export default function GardenMap() {
     setSelectedId(null);
     setPlantName('');
     setSelectedCatalogId(null);
+    setSelectedVarietyId(null);
     setCatalogSearch('');
   };
 
@@ -201,6 +265,7 @@ export default function GardenMap() {
     setSelectedId(placement.id);
     setPlantName(placement.name);
     setSelectedCatalogId(placement.plant_catalog_id ?? null);
+    setSelectedVarietyId(placement.plant_catalog_variety_id ?? null);
     setCatalogSearch('');
     setViewState((prev) => ({
       ...prev,
@@ -286,12 +351,28 @@ export default function GardenMap() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4">
+            <GardenWeather
+              latitude={weatherLocation.latitude}
+              longitude={weatherLocation.longitude}
+            />
+          </div>
+          <PlantMapFiltersPanel
+            filters={mapFilters}
+            onChange={setMapFilters}
+            catalog={catalog}
+            totalCount={placements.length}
+            filteredCount={filteredPlacements.length}
+          />
           {loading && <p className="text-sm text-gray-500">Loading plants...</p>}
           {!loading && placements.length === 0 && (
             <p className="text-sm text-gray-500">Click the map to add your first plant.</p>
           )}
+          {!loading && placements.length > 0 && filteredPlacements.length === 0 && (
+            <p className="text-sm text-gray-500">No plants match these filters.</p>
+          )}
           <ul className="space-y-2">
-            {placements.map((placement) => (
+            {filteredPlacements.map((placement) => (
               <li key={placement.id} className="flex gap-2">
                 <button
                   type="button"
@@ -304,7 +385,12 @@ export default function GardenMap() {
                 >
                   <span className="font-medium text-emerald-900">{placement.name}</span>
                   {placement.plant_catalog_id && (
-                    <span className="ml-1 text-xs text-emerald-600">catalog</span>
+                    <span className="ml-1 text-xs text-emerald-600">
+                      {placement.plant_catalog_variety_id
+                        ? findCatalogVariety(catalogVarieties, placement.plant_catalog_variety_id)
+                            ?.name ?? 'catalog'
+                        : 'catalog'}
+                    </span>
                   )}
                   <span className="mt-0.5 block text-xs text-gray-500">
                     {placement.latitude.toFixed(5)}, {placement.longitude.toFixed(5)}
@@ -335,6 +421,12 @@ export default function GardenMap() {
               onClearCatalogSelection={clearCatalogSelection}
             />
             {selectedCatalogEntry && <PlantCatalogDetails entry={selectedCatalogEntry} />}
+            <PlantVarietyPicker
+              catalogEntry={selectedCatalogEntry}
+              varieties={catalogVarieties}
+              selectedVarietyId={selectedVarietyId}
+              onSelectVariety={selectVariety}
+            />
             <label htmlFor="plant-name" className="mb-1 block text-xs font-medium text-gray-700">
               Display name
             </label>
@@ -345,7 +437,18 @@ export default function GardenMap() {
               onChange={(e) => {
                 setPlantName(e.target.value);
                 if (selectedCatalogId && e.target.value !== selectedCatalogEntry?.common_name) {
+                  const expectedWithVariety =
+                    selectedCatalogEntry && selectedVarietyId
+                      ? buildVarietyDisplayName(
+                          selectedCatalogEntry,
+                          findCatalogVariety(catalogVarieties, selectedVarietyId)!
+                        )
+                      : null;
+                  if (expectedWithVariety && e.target.value === expectedWithVariety) {
+                    return;
+                  }
                   setSelectedCatalogId(null);
+                  setSelectedVarietyId(null);
                 }
               }}
               placeholder="Plant name"
@@ -368,6 +471,7 @@ export default function GardenMap() {
                       setPendingPin(null);
                       setPlantName('');
                       setSelectedCatalogId(null);
+                      setSelectedVarietyId(null);
                       setCatalogSearch('');
                     }}
                     className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
@@ -455,6 +559,25 @@ export default function GardenMap() {
           </div>
         </form>
 
+        <div className="absolute bottom-4 left-4 z-10">
+          <button
+            type="button"
+            onClick={() => setCompactMarkers((value) => !value)}
+            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-800 shadow-lg ring-1 ring-black/5 hover:bg-emerald-50"
+            aria-pressed={compactMarkers}
+          >
+            {compactMarkers ? 'Show names' : 'Dots only'}
+          </button>
+        </div>
+
+        <div className="absolute bottom-4 right-4 z-10 hidden max-w-xs md:block">
+          <GardenWeather
+            latitude={weatherLocation.latitude}
+            longitude={weatherLocation.longitude}
+            compact
+          />
+        </div>
+
         <Map
           {...viewState}
           onMove={(evt) => setViewState(evt.viewState)}
@@ -463,24 +586,33 @@ export default function GardenMap() {
           style={{ width: '100%', height: '100%' }}
           onClick={handleMapClick}
         >
-          {placements.map((placement) => (
+          {filteredPlacements.map((placement) => (
             <Marker
               key={placement.id}
               latitude={placement.latitude}
               longitude={placement.longitude}
-              anchor="bottom"
+              anchor={compactMarkers ? 'center' : 'bottom'}
               onClick={(e) => {
                 e.originalEvent.stopPropagation();
                 selectPlacement(placement);
               }}
             >
-              <div
-                className={`rounded-full px-2 py-1 text-xs font-medium text-white shadow ${
-                  selectedId === placement.id ? 'bg-emerald-700' : 'bg-emerald-500'
-                }`}
-              >
-                {placement.name}
-              </div>
+              {compactMarkers ? (
+                <div
+                  className={`h-3.5 w-3.5 rounded-full border-2 border-white shadow ${
+                    selectedId === placement.id ? 'bg-emerald-700' : 'bg-emerald-500'
+                  }`}
+                  title={placement.name}
+                />
+              ) : (
+                <div
+                  className={`rounded-full px-2 py-1 text-xs font-medium text-white shadow ${
+                    selectedId === placement.id ? 'bg-emerald-700' : 'bg-emerald-500'
+                  }`}
+                >
+                  {placement.name}
+                </div>
+              )}
             </Marker>
           ))}
           {pendingPin && (

@@ -12,8 +12,18 @@ export interface GardenPlacement {
   longitude: number;
   /** Nullable FK to plant_catalog — added in Phase 2 migration */
   plant_catalog_id?: string | null;
+  /** Nullable FK to plant_catalog_variety — cultivar / subspecies */
+  plant_catalog_variety_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PlantCatalogVariety {
+  id: string;
+  plant_catalog_id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
 }
 
 /**
@@ -38,6 +48,7 @@ export const createPlacementSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   plant_catalog_id: z.string().uuid().nullish(),
+  plant_catalog_variety_id: z.string().uuid().nullish(),
 });
 
 export const updatePlacementSchema = z.object({
@@ -45,6 +56,7 @@ export const updatePlacementSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   plant_catalog_id: z.string().uuid().nullish(),
+  plant_catalog_variety_id: z.string().uuid().nullish(),
 });
 
 export type CreatePlacementInput = z.infer<typeof createPlacementSchema>;

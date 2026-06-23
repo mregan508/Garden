@@ -63,6 +63,7 @@ export async function createPlacement(
       latitude: parsed.data.latitude,
       longitude: parsed.data.longitude,
       plant_catalog_id: parsed.data.plant_catalog_id ?? null,
+      plant_catalog_variety_id: parsed.data.plant_catalog_variety_id ?? null,
     })
     .select()
     .single();

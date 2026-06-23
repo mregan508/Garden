@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PlantCatalogEntry } from '../types/garden';
+import type { PlantCatalogEntry, PlantCatalogVariety } from '../types/garden';
 
 function asStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
@@ -64,4 +64,33 @@ export async function getPlantCatalogEntry(
   }
 
   return { data: mapCatalogRow(data as Record<string, unknown>), error: null };
+}
+
+function mapVarietyRow(row: Record<string, unknown>): PlantCatalogVariety {
+  return {
+    id: row.id as string,
+    plant_catalog_id: row.plant_catalog_id as string,
+    name: row.name as string,
+    description: (row.description as string | null) ?? null,
+    sort_order: (row.sort_order as number) ?? 0,
+  };
+}
+
+export async function listPlantCatalogVarieties(
+  supabase: SupabaseClient
+): Promise<{ data: PlantCatalogVariety[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('plant_catalog_variety')
+    .select('*')
+    .order('sort_order')
+    .order('name');
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return {
+    data: (data ?? []).map((row) => mapVarietyRow(row as Record<string, unknown>)),
+    error: null,
+  };
 }
