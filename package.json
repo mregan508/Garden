@@ -1,0 +1,10 @@
+{
+  "name": "gardening",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix packages/shared && npm install --prefix gardening-web && npm install --prefix gardening-app"
+  },
+  "devDependencies": {
+    "supabase": "^2.30.0"
+  }
+}

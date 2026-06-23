@@ -1,0 +1,785 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Camera, MapView, PointAnnotation } from '@rnmapbox/maps';
+import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@gardening/shared';
+import {
+  createJournalEntry,
+  createPlacement,
+  deletePlacement,
+  listPlantCatalog,
+  listPlacements,
+  searchAddress,
+  updatePlacement,
+  type GardenPlacement,
+  type GeocodeResult,
+  type PlantCatalogEntry,
+} from '@gardening/shared';
+import '@/lib/mapbox';
+import { getMapboxAccessToken, isMapboxConfigured } from '@/lib/mapbox';
+
+const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
+const DEFAULT_CENTER: [number, number] = [-122.4194, 37.7749];
+const MAP_ZOOM = 18;
+
+type PendingPin = { latitude: number; longitude: number };
+
+export default function MapScreen() {
+  const router = useRouter();
+  const { user, supabase, signOut } = useAuth();
+  const mapboxToken = getMapboxAccessToken();
+
+  const [placements, setPlacements] = useState<GardenPlacement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
+  const [cameraAnimation, setCameraAnimation] = useState(0);
+  const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [plantName, setPlantName] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [catalog, setCatalog] = useState<PlantCatalogEntry[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
+  const [addressQuery, setAddressQuery] = useState('');
+  const [addressResults, setAddressResults] = useState<GeocodeResult[]>([]);
+  const [addressSearching, setAddressSearching] = useState(false);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [showAddressResults, setShowAddressResults] = useState(false);
+  const [showPlantList, setShowPlantList] = useState(false);
+
+  const selectedPlacement = useMemo(
+    () => placements.find((p) => p.id === selectedId) ?? null,
+    [placements, selectedId]
+  );
+
+  const filteredCatalog = useMemo(() => {
+    const q = catalogSearch.trim().toLowerCase();
+    if (!q) return catalog.slice(0, 8);
+    return catalog.filter(
+      (entry) =>
+        entry.common_name.toLowerCase().includes(q) ||
+        entry.scientific_name?.toLowerCase().includes(q)
+    );
+  }, [catalog, catalogSearch]);
+
+  const selectedCatalogEntry = useMemo(
+    () => catalog.find((entry) => entry.id === selectedCatalogId) ?? null,
+    [catalog, selectedCatalogId]
+  );
+
+  const flyTo = useCallback((longitude: number, latitude: number, animate = true) => {
+    setCenter([longitude, latitude]);
+    setCameraAnimation(animate ? 800 : 0);
+  }, []);
+
+  const loadPlacements = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    const { data, error: listError } = await listPlacements(supabase, user.id);
+    if (listError) {
+      setError(listError);
+    } else {
+      setPlacements(data);
+      if (data.length > 0) {
+        flyTo(data[0].longitude, data[0].latitude, false);
+      }
+    }
+    setLoading(false);
+  }, [supabase, user, flyTo]);
+
+  useEffect(() => {
+    void loadPlacements();
+    void (async () => {
+      const { data } = await listPlantCatalog(supabase);
+      setCatalog(data);
+    })();
+  }, [loadPlacements, supabase]);
+
+  useEffect(() => {
+    void (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const location = await Location.getCurrentPositionAsync({});
+      flyTo(location.coords.longitude, location.coords.latitude, false);
+    })();
+  }, [flyTo]);
+
+  const openNewPinModal = (latitude: number, longitude: number) => {
+    setSelectedId(null);
+    setSelectedCatalogId(null);
+    setCatalogSearch('');
+    setPendingPin({ latitude, longitude });
+    setPlantName('');
+    setModalVisible(true);
+    setShowPlantList(false);
+  };
+
+  const openEditModal = (placement: GardenPlacement) => {
+    setPendingPin(null);
+    setSelectedId(placement.id);
+    setPlantName(placement.name);
+    setSelectedCatalogId(placement.plant_catalog_id ?? null);
+    setCatalogSearch('');
+    setModalVisible(true);
+    setShowPlantList(false);
+    flyTo(placement.longitude, placement.latitude);
+  };
+
+  const handleMapPress = (event: { geometry?: { coordinates?: number[] } }) => {
+    const coords = event.geometry?.coordinates;
+    if (!coords || coords.length < 2) return;
+    const [longitude, latitude] = coords;
+    openNewPinModal(latitude, longitude);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setPendingPin(null);
+    setSelectedId(null);
+    setPlantName('');
+    setSelectedCatalogId(null);
+    setCatalogSearch('');
+  };
+
+  const selectCatalogEntry = (entry: PlantCatalogEntry) => {
+    setSelectedCatalogId(entry.id);
+    setPlantName(entry.common_name);
+    setCatalogSearch(entry.common_name);
+  };
+
+  const clearCatalogSelection = () => {
+    setSelectedCatalogId(null);
+    setCatalogSearch('');
+  };
+
+  const goToAddress = (result: GeocodeResult) => {
+    flyTo(result.longitude, result.latitude);
+    setAddressQuery(result.placeName);
+    setAddressResults([]);
+    setShowAddressResults(false);
+    setAddressError(null);
+    setPendingPin(null);
+    setSelectedId(null);
+    setShowPlantList(false);
+  };
+
+  const handleAddressSearch = async () => {
+    if (!addressQuery.trim()) return;
+
+    setAddressSearching(true);
+    setAddressError(null);
+    try {
+      const results = await searchAddress(addressQuery, mapboxToken);
+      setAddressResults(results);
+      setShowAddressResults(true);
+      if (results.length === 0) {
+        setAddressError('No addresses found. Try a street, city, or zip code.');
+      }
+    } catch {
+      setAddressError('Address search failed. Check your Mapbox token.');
+      setAddressResults([]);
+    } finally {
+      setAddressSearching(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user || !plantName.trim()) return;
+
+    setSaving(true);
+    setError(null);
+
+    if (pendingPin) {
+      const { data, error: createError } = await createPlacement(supabase, user.id, {
+        name: plantName.trim(),
+        latitude: pendingPin.latitude,
+        longitude: pendingPin.longitude,
+        plant_catalog_id: selectedCatalogId,
+      });
+      setSaving(false);
+      if (createError) {
+        setError(createError);
+        return;
+      }
+      if (data) {
+        setPlacements((prev) => [data, ...prev]);
+        await createJournalEntry(supabase, user.id, data.id, {
+          entry_type: 'planted',
+          occurred_at: new Date().toISOString(),
+          notes: null,
+        });
+      }
+      closeModal();
+      return;
+    }
+
+    if (selectedPlacement) {
+      const { data, error: updateError } = await updatePlacement(supabase, selectedPlacement.id, {
+        name: plantName.trim(),
+        plant_catalog_id: selectedCatalogId,
+      });
+      setSaving(false);
+      if (updateError) {
+        setError(updateError);
+        return;
+      }
+      if (data) {
+        setPlacements((prev) => prev.map((p) => (p.id === data.id ? data : p)));
+      }
+      closeModal();
+    }
+  };
+
+  const handleDelete = () => {
+    if (!selectedPlacement) return;
+    Alert.alert('Delete plant', `Remove "${selectedPlacement.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setSaving(true);
+            const { error: deleteError } = await deletePlacement(supabase, selectedPlacement.id);
+            setSaving(false);
+            if (deleteError) {
+              setError(deleteError);
+              return;
+            }
+            setPlacements((prev) => prev.filter((p) => p.id !== selectedPlacement.id));
+            closeModal();
+          })();
+        },
+      },
+    ]);
+  };
+
+  if (!isMapboxConfigured()) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.missingTokenTitle}>Mapbox token required</Text>
+        <Text style={styles.missingTokenText}>
+          Add EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN to gardening-app/.env (same pk. token as web).
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>My Garden</Text>
+          <Text style={styles.headerSubtitle}>{user?.email}</Text>
+        </View>
+        <Pressable onPress={() => void signOut()}>
+          <Text style={styles.signOut}>Sign out</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.mapWrapper}>
+        {loading ? (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#059669" />
+          </View>
+        ) : null}
+
+        <KeyboardAvoidingView
+          style={styles.addressSearchWrap}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.addressSearchCard}>
+            <View style={styles.addressSearchRow}>
+              <TextInput
+                style={styles.addressInput}
+                placeholder="Search address or place"
+                placeholderTextColor="#6b7280"
+                value={addressQuery}
+                onChangeText={(text) => {
+                  setAddressQuery(text);
+                  setAddressError(null);
+                }}
+                onFocus={() => {
+                  if (addressResults.length > 0) setShowAddressResults(true);
+                }}
+                returnKeyType="search"
+                onSubmitEditing={() => void handleAddressSearch()}
+              />
+              <Pressable
+                style={[
+                  styles.addressGoButton,
+                  (addressSearching || !addressQuery.trim()) && styles.buttonDisabled,
+                ]}
+                onPress={() => void handleAddressSearch()}
+                disabled={addressSearching || !addressQuery.trim()}
+              >
+                <Text style={styles.addressGoText}>{addressSearching ? '...' : 'Go'}</Text>
+              </Pressable>
+            </View>
+            {addressError ? <Text style={styles.addressError}>{addressError}</Text> : null}
+            {showAddressResults && addressResults.length > 0 ? (
+              <View style={styles.addressResults}>
+                {addressResults.map((result) => (
+                  <Pressable
+                    key={result.id}
+                    style={styles.addressResultItem}
+                    onPress={() => goToAddress(result)}
+                  >
+                    <Text style={styles.addressResultText}>{result.placeName}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+
+        <MapView style={styles.map} styleURL={SATELLITE_STYLE} onPress={handleMapPress}>
+          <Camera
+            zoomLevel={MAP_ZOOM}
+            centerCoordinate={center}
+            animationDuration={cameraAnimation}
+          />
+          {placements.map((placement) => (
+            <PointAnnotation
+              key={placement.id}
+              id={placement.id}
+              coordinate={[placement.longitude, placement.latitude]}
+              onSelected={() => openEditModal(placement)}
+            >
+              <View
+                style={[
+                  styles.marker,
+                  selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
+                ]}
+              >
+                <Text style={styles.markerText}>{placement.name}</Text>
+              </View>
+            </PointAnnotation>
+          ))}
+          {pendingPin ? (
+            <PointAnnotation
+              id="pending-pin"
+              coordinate={[pendingPin.longitude, pendingPin.latitude]}
+            >
+              <View style={[styles.marker, styles.markerPending]} />
+            </PointAnnotation>
+          ) : null}
+        </MapView>
+
+        <Pressable
+          style={styles.plantListToggle}
+          onPress={() => setShowPlantList((open) => !open)}
+        >
+          <Text style={styles.plantListToggleText}>
+            {showPlantList ? 'Hide plants' : `Plants (${placements.length})`}
+          </Text>
+        </Pressable>
+
+        {showPlantList ? (
+          <View style={styles.plantListPanel}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {placements.length === 0 ? (
+                <Text style={styles.plantListEmpty}>Tap the map to add your first plant.</Text>
+              ) : (
+                placements.map((placement) => (
+                  <View key={placement.id} style={styles.plantListRow}>
+                    <Pressable
+                      style={[
+                        styles.plantListItem,
+                        selectedId === placement.id && styles.plantListItemSelected,
+                      ]}
+                      onPress={() => openEditModal(placement)}
+                    >
+                      <Text style={styles.plantListName}>
+                        {placement.name}
+                        {placement.plant_catalog_id ? (
+                          <Text style={styles.plantListCatalog}> catalog</Text>
+                        ) : null}
+                      </Text>
+                      <Text style={styles.plantListCoords}>
+                        {placement.latitude.toFixed(5)}, {placement.longitude.toFixed(5)}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.plantListJournalButton}
+                      onPress={() => router.push(`/journal/${placement.id}`)}
+                    >
+                      <Text style={styles.plantListJournalText}>Journal</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        ) : null}
+      </View>
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{pendingPin ? 'New plant' : 'Edit plant'}</Text>
+
+              <Text style={styles.fieldLabel}>From catalog (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Search plants..."
+                placeholderTextColor="#6b7280"
+                value={catalogSearch}
+                onChangeText={setCatalogSearch}
+              />
+              {selectedCatalogId ? (
+                <Pressable onPress={clearCatalogSelection}>
+                  <Text style={styles.clearCatalogLink}>Use custom name only</Text>
+                </Pressable>
+              ) : null}
+              {filteredCatalog.length > 0 ? (
+                <View style={styles.catalogList}>
+                  {filteredCatalog.map((item) => (
+                    <Pressable
+                      key={item.id}
+                      style={[
+                        styles.catalogItem,
+                        selectedCatalogId === item.id && styles.catalogItemSelected,
+                      ]}
+                      onPress={() => selectCatalogEntry(item)}
+                    >
+                      <Text style={styles.catalogItemName}>{item.common_name}</Text>
+                      {item.scientific_name ? (
+                        <Text style={styles.catalogItemScientific}>{item.scientific_name}</Text>
+                      ) : null}
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {selectedCatalogEntry ? (
+                <View style={styles.catalogDetails}>
+                  {selectedCatalogEntry.light_requirements ? (
+                    <Text style={styles.catalogDetailText}>
+                      Light: {selectedCatalogEntry.light_requirements}
+                    </Text>
+                  ) : null}
+                  {selectedCatalogEntry.water_needs ? (
+                    <Text style={styles.catalogDetailText}>
+                      Water: {selectedCatalogEntry.water_needs}
+                    </Text>
+                  ) : null}
+                  {selectedCatalogEntry.companion_plants &&
+                  selectedCatalogEntry.companion_plants.length > 0 ? (
+                    <Text style={styles.catalogDetailText}>
+                      Companions: {selectedCatalogEntry.companion_plants.join(', ')}
+                    </Text>
+                  ) : null}
+                  {selectedCatalogEntry.benefits && selectedCatalogEntry.benefits.length > 0 ? (
+                    <Text style={styles.catalogDetailText}>
+                      Notes: {selectedCatalogEntry.benefits.join('; ')}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>Display name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Plant name"
+                placeholderTextColor="#6b7280"
+                value={plantName}
+                onChangeText={(text) => {
+                  setPlantName(text);
+                  if (selectedCatalogId && text !== selectedCatalogEntry?.common_name) {
+                    setSelectedCatalogId(null);
+                  }
+                }}
+              />
+
+              {selectedPlacement && !pendingPin ? (
+                <Pressable
+                  style={styles.journalButton}
+                  onPress={() => {
+                    closeModal();
+                    router.push(`/journal/${selectedPlacement.id}`);
+                  }}
+                >
+                  <Text style={styles.journalButtonText}>Open journal</Text>
+                </Pressable>
+              ) : null}
+
+              <Pressable
+                style={[styles.saveButton, (saving || !plantName.trim()) && styles.buttonDisabled]}
+                onPress={() => void handleSave()}
+                disabled={saving || !plantName.trim()}
+              >
+                <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
+              </Pressable>
+              {selectedPlacement ? (
+                <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={saving}>
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={closeModal}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#ecfdf5' },
+  centered: { justifyContent: 'center', alignItems: 'center', padding: 24 },
+  missingTokenTitle: { fontSize: 18, fontWeight: '600', color: '#064e3b', marginBottom: 8 },
+  missingTokenText: { fontSize: 14, color: '#047857', textAlign: 'center' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 56,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1fae5',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#064e3b' },
+  headerSubtitle: { fontSize: 12, color: '#047857' },
+  signOut: { color: '#059669', fontSize: 14 },
+  mapWrapper: { flex: 1, position: 'relative' },
+  map: { flex: 1 },
+  addressSearchWrap: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  addressSearchCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  addressSearchRow: { flexDirection: 'row', gap: 8 },
+  addressInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+    backgroundColor: '#fff',
+  },
+  addressGoButton: {
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  addressGoText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  addressError: { marginTop: 6, fontSize: 12, color: '#dc2626', paddingHorizontal: 4 },
+  addressResults: {
+    marginTop: 8,
+    maxHeight: 160,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  addressResultItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  addressResultText: { fontSize: 13, color: '#111827' },
+  marker: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  markerDefault: { backgroundColor: '#10b981' },
+  markerSelected: { backgroundColor: '#047857' },
+  markerPending: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  markerText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 80,
+    alignSelf: 'center',
+    zIndex: 20,
+  },
+  plantListToggle: {
+    position: 'absolute',
+    bottom: 16,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  plantListToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
+  plantListPanel: {
+    position: 'absolute',
+    bottom: 56,
+    left: 12,
+    right: 12,
+    maxHeight: 220,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  plantListEmpty: { padding: 12, fontSize: 13, color: '#6b7280', textAlign: 'center' },
+  plantListRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  plantListItem: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  plantListJournalButton: {
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    backgroundColor: '#fff',
+  },
+  plantListJournalText: { fontSize: 12, fontWeight: '600', color: '#047857' },
+  plantListItemSelected: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
+  plantListName: { fontSize: 14, fontWeight: '600', color: '#064e3b' },
+  plantListCatalog: { fontSize: 12, fontWeight: '400', color: '#059669' },
+  plantListCoords: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  errorText: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+    color: '#dc2626',
+    backgroundColor: '#fff',
+    padding: 8,
+    borderRadius: 8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  modalScroll: { flex: 1 },
+  modalScrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 12, color: '#064e3b' },
+  fieldLabel: { fontSize: 12, fontWeight: '500', color: '#374151', marginBottom: 4 },
+  clearCatalogLink: {
+    fontSize: 12,
+    color: '#047857',
+    marginBottom: 8,
+    textDecorationLine: 'underline',
+  },
+  catalogList: { maxHeight: 140, marginBottom: 8 },
+  catalogItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  catalogItemSelected: { backgroundColor: '#ecfdf5' },
+  catalogItemName: { fontSize: 14, color: '#111827', fontWeight: '500' },
+  catalogItemScientific: { fontSize: 12, color: '#6b7280', fontStyle: 'italic' },
+  catalogDetails: {
+    backgroundColor: '#ecfdf5',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  catalogDetailText: { fontSize: 12, color: '#374151', marginBottom: 2 },
+  input: {
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#fff',
+    marginBottom: 12,
+  },
+  journalButton: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#6ee7b7',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+  },
+  journalButtonText: { color: '#047857', fontWeight: '600' },
+  saveButton: {
+    backgroundColor: '#059669',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  saveButtonText: { color: '#fff', fontWeight: '600' },
+  deleteButton: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  deleteButtonText: { color: '#dc2626' },
+  cancelText: { textAlign: 'center', marginTop: 14, color: '#6b7280' },
+  buttonDisabled: { opacity: 0.5 },
+});

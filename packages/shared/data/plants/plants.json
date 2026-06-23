@@ -1,0 +1,133 @@
+[
+  {
+    "common_name": "Tomato",
+    "scientific_name": "Solanum lycopersicum",
+    "light_requirements": "Full sun (6–8+ hours)",
+    "water_needs": "Regular; keep soil evenly moist",
+    "companion_plants": ["Basil", "Marigold", "Carrot"],
+    "benefits": ["High in lycopene", "Heavy feeder"]
+  },
+  {
+    "common_name": "Basil",
+    "scientific_name": "Ocimum basilicum",
+    "light_requirements": "Full sun",
+    "water_needs": "Moderate; avoid wet leaves",
+    "companion_plants": ["Tomato", "Pepper"],
+    "benefits": ["Repels aphids", "Culinary herb"]
+  },
+  {
+    "common_name": "Bell Pepper",
+    "scientific_name": "Capsicum annuum",
+    "light_requirements": "Full sun",
+    "water_needs": "Regular; consistent moisture",
+    "companion_plants": ["Basil", "Tomato", "Carrot"],
+    "benefits": ["Rich in vitamin C"]
+  },
+  {
+    "common_name": "Peach Tree",
+    "scientific_name": "Prunus persica",
+    "light_requirements": "Full sun (6–8+ hours)",
+    "water_needs": "Regular; deep watering during fruit development",
+    "companion_plants": ["Comfrey", "Chamomile", "Garlic"],
+    "benefits": ["Stone fruit", "Spring blossoms", "Needs winter chill in many varieties"]
+  },
+  {
+    "common_name": "Pear Tree",
+    "scientific_name": "Pyrus communis",
+    "light_requirements": "Full sun",
+    "water_needs": "Regular; consistent moisture while fruit sets",
+    "companion_plants": ["Comfrey", "Chamomile", "Nasturtium"],
+    "benefits": ["Long-lived tree", "Fire blight sensitive; choose resistant cultivars"]
+  },
+  {
+    "common_name": "Apple Tree",
+    "scientific_name": "Malus domestica",
+    "light_requirements": "Full sun",
+    "water_needs": "Regular; avoid drought during fruit swell",
+    "companion_plants": ["Comfrey", "Chives", "Nasturtium"],
+    "benefits": ["Requires cross-pollination from another variety in most cases", "Many dwarf rootstocks for small gardens"]
+  },
+  {
+    "common_name": "Strawberry",
+    "scientific_name": "Fragaria × ananassa",
+    "light_requirements": "Full sun",
+    "water_needs": "Regular; avoid drought",
+    "companion_plants": ["Lettuce", "Spinach", "Thyme"],
+    "benefits": ["Perennial", "Ground cover option"]
+  },
+  {
+    "common_name": "Rose",
+    "scientific_name": "Rosa",
+    "light_requirements": "Full sun (6+ hours)",
+    "water_needs": "Regular; deep watering; avoid wet foliage",
+    "companion_plants": ["Garlic", "Chives", "Lavender"],
+    "benefits": ["Ornamental blooms", "Attracts pollinators", "Prune for air circulation"]
+  },
+  {
+    "common_name": "Cherry Tree",
+    "scientific_name": "Prunus avium",
+    "light_requirements": "Full sun",
+    "water_needs": "Regular; consistent moisture during fruit ripening",
+    "companion_plants": ["Comfrey", "Chamomile", "Garlic"],
+    "benefits": ["Sweet or sour types; birds love fruit—net if needed", "Early spring blossoms"]
+  },
+  {
+    "common_name": "Chamomile",
+    "scientific_name": "Matricaria chamomilla",
+    "light_requirements": "Full sun to partial shade",
+    "water_needs": "Moderate; allow soil to dry slightly between waterings",
+    "companion_plants": ["Cabbage", "Onion", "Mint"],
+    "benefits": ["Attracts beneficial insects", "Self-seeding annual or short-lived perennial"],
+    "medicinal_uses": ["Calming tea from dried flowers"]
+  },
+  {
+    "common_name": "Fennel",
+    "scientific_name": "Foeniculum vulgare",
+    "light_requirements": "Full sun",
+    "water_needs": "Moderate; drought tolerant once established",
+    "companion_plants": ["Dill", "Coriander"],
+    "benefits": ["Culinary herb and pollinator magnet", "Do not plant near most vegetables—can inhibit growth"],
+    "medicinal_uses": ["Seeds and fronds aid digestion"]
+  },
+  {
+    "common_name": "Fleabane",
+    "scientific_name": "Erigeron",
+    "light_requirements": "Full sun to partial shade",
+    "water_needs": "Low to moderate; well-drained soil",
+    "companion_plants": ["Yarrow", "Lavender"],
+    "benefits": ["Native wildflower", "Drought tolerant", "Supports pollinators"]
+  },
+  {
+    "common_name": "Mullein",
+    "scientific_name": "Verbascum thapsus",
+    "light_requirements": "Full sun",
+    "water_needs": "Low; prefers dry, poor soils once established",
+    "companion_plants": ["Yarrow", "Echinacea"],
+    "benefits": ["Biennial with tall flower spike", "Self-seeds readily"],
+    "medicinal_uses": ["Leaves traditionally used for respiratory support"]
+  },
+  {
+    "common_name": "Lilac",
+    "scientific_name": "Syringa vulgaris",
+    "light_requirements": "Full sun (6+ hours)",
+    "water_needs": "Moderate; reduce after establishment",
+    "companion_plants": ["Peony", "Clematis"],
+    "benefits": ["Fragrant spring blooms", "Deciduous shrub or small tree"]
+  },
+  {
+    "common_name": "Lavender",
+    "scientific_name": "Lavandula",
+    "light_requirements": "Full sun",
+    "water_needs": "Low; well-drained soil",
+    "companion_plants": ["Rosemary", "Sage"],
+    "benefits": ["Pollinator friendly", "Drought tolerant"]
+  },
+  {
+    "common_name": "Bleeding Heart",
+    "scientific_name": "Lamprocapnos spectabilis",
+    "light_requirements": "Partial shade to full shade",
+    "water_needs": "Regular; keep soil moist but not soggy",
+    "companion_plants": ["Fern", "Hosta", "Astilbe"],
+    "benefits": ["Shade perennial", "Distinctive heart-shaped spring flowers", "Dies back in summer heat"]
+  }
+]

@@ -1,0 +1,40 @@
+{
+  "name": "@gardening/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./garden": "./garden/index.ts",
+    "./types/garden": "./types/garden.ts",
+    "./supabase/client-web": "./supabase/client-web.ts",
+    "./supabase/client-native": "./supabase/client-native.ts",
+    "./mapbox/geocode": "./mapbox/geocode.ts"
+  },
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": ">=2.0.0",
+    "react": "^19.0.0"
+  },
+  "files": [
+    "index.ts",
+    "tsconfig.json",
+    "auth/**/*",
+    "garden/**/*",
+    "mapbox/**/*",
+    "supabase/**/*",
+    "types/**/*"
+  ],
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.1",
+    "gardening": "file:../..",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

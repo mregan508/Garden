@@ -1,0 +1,83 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  createJournalEntrySchema,
+  type CreateJournalEntryInput,
+  type GardenJournalEntry,
+} from '../types/garden';
+
+export async function listJournalEntries(
+  supabase: SupabaseClient,
+  placementId: string
+): Promise<{ data: GardenJournalEntry[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('garden_journal_entries')
+    .select('*')
+    .eq('placement_id', placementId)
+    .order('occurred_at', { ascending: false });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: (data ?? []) as GardenJournalEntry[], error: null };
+}
+
+export async function createJournalEntry(
+  supabase: SupabaseClient,
+  userId: string,
+  placementId: string,
+  input: CreateJournalEntryInput
+): Promise<{ data: GardenJournalEntry | null; error: string | null }> {
+  const parsed = createJournalEntrySchema.safeParse(input);
+  if (!parsed.success) {
+    return { data: null, error: parsed.error.errors[0]?.message ?? 'Invalid input' };
+  }
+
+  const { data, error } = await supabase
+    .from('garden_journal_entries')
+    .insert({
+      user_id: userId,
+      placement_id: placementId,
+      entry_type: parsed.data.entry_type,
+      occurred_at: parsed.data.occurred_at,
+      notes: parsed.data.notes?.trim() || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: data as GardenJournalEntry, error: null };
+}
+
+export async function deleteJournalEntry(
+  supabase: SupabaseClient,
+  entryId: string
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('garden_journal_entries').delete().eq('id', entryId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+
+/** ISO timestamp for a local calendar date (YYYY-MM-DD) at noon UTC. */
+export function dateInputToIso(dateStr: string): string {
+  return new Date(`${dateStr}T12:00:00`).toISOString();
+}
+
+export function isoToDateInput(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+export function formatJournalDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
