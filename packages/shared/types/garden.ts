@@ -98,3 +98,58 @@ export const createJournalEntrySchema = z.object({
 });
 
 export type CreateJournalEntryInput = z.infer<typeof createJournalEntrySchema>;
+
+export const REMINDER_TYPES = [
+  'watered',
+  'fertilized',
+  'fungicide',
+  'insecticide',
+  'pruning',
+] as const;
+
+export type ReminderType = (typeof REMINDER_TYPES)[number];
+
+export const REMINDER_TYPE_LABELS: Record<ReminderType, string> = {
+  watered: 'Watering',
+  fertilized: 'Fertilizing',
+  fungicide: 'Fungicide',
+  insecticide: 'Insecticide',
+  pruning: 'Pruning',
+};
+
+export const DEFAULT_REMINDER_INTERVAL_DAYS: Record<ReminderType, number> = {
+  watered: 3,
+  fertilized: 14,
+  fungicide: 21,
+  insecticide: 21,
+  pruning: 90,
+};
+
+export interface GardenReminder {
+  id: string;
+  user_id: string;
+  placement_id: string;
+  reminder_type: ReminderType;
+  interval_days: number;
+  next_due_at: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GardenReminderWithPlant extends GardenReminder {
+  placement_name: string;
+}
+
+export interface GardenJournalEntryWithPlant extends GardenJournalEntry {
+  placement_name: string;
+}
+
+export const upsertReminderSchema = z.object({
+  reminder_type: z.enum(REMINDER_TYPES),
+  interval_days: z.number().int().min(1).max(365),
+  next_due_at: z.string().datetime({ message: 'Invalid date' }),
+  enabled: z.boolean().optional(),
+});
+
+export type UpsertReminderInput = z.infer<typeof upsertReminderSchema>;

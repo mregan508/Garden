@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPlacement, useAuth } from '@gardening/shared';
 import { PlantJournal } from '@/components/PlantJournal';
+import { PlantReminders } from '@/components/PlantReminders';
 
 interface JournalPageProps {
   placementId: string;
@@ -52,13 +53,16 @@ export function JournalPage({ placementId }: JournalPageProps) {
         ) : loading || !user || !supabase || !placementName ? (
           <p className="text-sm text-gray-500">Loading journal...</p>
         ) : (
-          <PlantJournal
-            supabase={supabase}
-            userId={user.id}
-            placementId={placementId}
-            placementName={placementName}
-            fullPage
-          />
+          <>
+            <PlantJournal
+              supabase={supabase}
+              userId={user.id}
+              placementId={placementId}
+              placementName={placementName}
+              fullPage
+            />
+            <PlantReminders supabase={supabase} userId={user.id} placementId={placementId} />
+          </>
         )}
       </main>
     </div>

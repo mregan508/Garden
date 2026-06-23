@@ -3,7 +3,9 @@ import {
   createJournalEntrySchema,
   type CreateJournalEntryInput,
   type GardenJournalEntry,
+  type GardenJournalEntryWithPlant,
 } from '../types/garden';
+import { syncReminderAfterJournalEntry } from './reminders';
 
 export async function listJournalEntries(
   supabase: SupabaseClient,
@@ -49,7 +51,15 @@ export async function createJournalEntry(
     return { data: null, error: error.message };
   }
 
-  return { data: data as GardenJournalEntry, error: null };
+  const entry = data as GardenJournalEntry;
+  await syncReminderAfterJournalEntry(
+    supabase,
+    placementId,
+    entry.entry_type,
+    entry.occurred_at
+  );
+
+  return { data: entry, error: null };
 }
 
 export async function deleteJournalEntry(
@@ -63,6 +73,38 @@ export async function deleteJournalEntry(
   }
 
   return { error: null };
+}
+
+type JournalRow = GardenJournalEntry & {
+  garden_placements: { name: string } | { name: string }[] | null;
+};
+
+export async function listRecentJournalEntries(
+  supabase: SupabaseClient,
+  userId: string,
+  limit = 50
+): Promise<{ data: GardenJournalEntryWithPlant[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('garden_journal_entries')
+    .select('*, garden_placements(name)')
+    .eq('user_id', userId)
+    .order('occurred_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  const entries = (data ?? []).map((row: JournalRow) => {
+    const placement = row.garden_placements;
+    const placementName = Array.isArray(placement)
+      ? (placement[0]?.name ?? 'Unknown plant')
+      : (placement?.name ?? 'Unknown plant');
+    const { garden_placements: _, ...entry } = row;
+    return { ...entry, placement_name: placementName };
+  });
+
+  return { data: entries, error: null };
 }
 
 /** ISO timestamp for a local calendar date (YYYY-MM-DD) at noon UTC. */

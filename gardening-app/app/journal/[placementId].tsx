@@ -10,6 +10,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { getPlacement, useAuth } from '@gardening/shared';
 import { PlantJournal } from '@/components/PlantJournal';
+import { PlantReminders } from '@/components/PlantReminders';
 
 export default function PlantJournalScreen() {
   const router = useRouter();
@@ -59,13 +60,16 @@ export default function PlantJournalScreen() {
           ) : loading || !user || !supabase || !placementId || !placementName ? (
             <ActivityIndicator color="#059669" style={styles.loader} />
           ) : (
-            <PlantJournal
-              supabase={supabase}
-              userId={user.id}
-              placementId={placementId}
-              placementName={placementName}
-              fullPage
-            />
+            <>
+              <PlantJournal
+                supabase={supabase}
+                userId={user.id}
+                placementId={placementId}
+                placementName={placementName}
+                fullPage
+              />
+              <PlantReminders supabase={supabase} userId={user.id} placementId={placementId} />
+            </>
           )}
         </ScrollView>
       </View>

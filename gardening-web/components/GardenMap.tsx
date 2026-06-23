@@ -262,6 +262,20 @@ export default function GardenMap() {
         <div className="border-b border-emerald-100 p-4">
           <h1 className="text-lg font-semibold text-emerald-900">My Garden</h1>
           <p className="text-sm text-emerald-700">{user?.email}</p>
+          <nav className="mt-3 flex flex-wrap gap-2 text-sm">
+            <Link
+              href="/activity"
+              className="rounded-lg border border-emerald-200 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50"
+            >
+              Activity
+            </Link>
+            <Link
+              href="/reminders"
+              className="rounded-lg border border-emerald-200 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50"
+            >
+              Reminders
+            </Link>
+          </nav>
           <button
             type="button"
             onClick={() => void signOut()}

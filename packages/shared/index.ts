@@ -4,4 +4,5 @@ export * from './types/garden';
 export * from './garden/placements';
 export * from './garden/catalog';
 export * from './garden/journal';
+export * from './garden/reminders';
 export * from './mapbox/geocode';
