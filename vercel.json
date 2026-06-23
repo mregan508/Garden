@@ -3,5 +3,12 @@
   "framework": "nextjs",
   "installCommand": "npm install --prefix packages/shared && npm install --prefix gardening-web",
   "buildCommand": "npm run build --prefix gardening-web",
-  "devCommand": "npm run dev --prefix gardening-web"
+  "devCommand": "npm run dev --prefix gardening-web",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/garden",
+      "permanent": false
+    }
+  ]
 }
