@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   createJournalEntrySchema,
+  updateJournalEntrySchema,
   type CreateJournalEntryInput,
   type GardenJournalEntry,
   type GardenJournalEntryWithPlant,
+  type UpdateJournalEntryInput,
 } from '../types/garden';
 import { syncReminderAfterJournalEntry } from './reminders';
 
@@ -60,6 +62,52 @@ export async function createJournalEntry(
   );
 
   return { data: entry, error: null };
+}
+
+export async function updateJournalEntry(
+  supabase: SupabaseClient,
+  entryId: string,
+  input: UpdateJournalEntryInput
+): Promise<{ data: GardenJournalEntry | null; error: string | null }> {
+  const parsed = updateJournalEntrySchema.safeParse(input);
+  if (!parsed.success) {
+    return { data: null, error: parsed.error.errors[0]?.message ?? 'Invalid input' };
+  }
+
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (parsed.data.occurred_at !== undefined) {
+    payload.occurred_at = parsed.data.occurred_at;
+  }
+  if (parsed.data.notes !== undefined) {
+    payload.notes = parsed.data.notes?.trim() || null;
+  }
+
+  const { data, error } = await supabase
+    .from('garden_journal_entries')
+    .update(payload)
+    .eq('id', entryId)
+    .select()
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const entry = data as GardenJournalEntry;
+  await syncReminderAfterJournalEntry(
+    supabase,
+    entry.placement_id,
+    entry.entry_type,
+    entry.occurred_at
+  );
+
+  return { data: entry, error: null };
+}
+
+export function findPlantedEntry(
+  entries: GardenJournalEntry[]
+): GardenJournalEntry | undefined {
+  return entries.find((entry) => entry.entry_type === 'planted');
 }
 
 export async function deleteJournalEntry(

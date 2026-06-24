@@ -44,6 +44,14 @@ Starter data is seeded in migrations. To regenerate variety seed from `scripts/c
 node scripts/generate-variety-migration.mjs
 ```
 
+To add more popular cultivars, edit `scripts/catalog-varieties-supplement.tsv` and run:
+
+```bash
+node scripts/generate-variety-supplement-migration.mjs
+```
+
+Then apply the generated migration (or `npx supabase db push`).
+
 To import additional plants from JSON:
 
 ```bash

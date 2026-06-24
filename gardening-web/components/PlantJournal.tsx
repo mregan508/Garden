@@ -8,9 +8,11 @@ import {
   createJournalEntry,
   dateInputToIso,
   deleteJournalEntry,
+  findPlantedEntry,
   formatJournalDate,
   isoToDateInput,
   listJournalEntries,
+  updateJournalEntry,
   type GardenJournalEntry,
   type JournalEntryType,
 } from '@gardening/shared';
@@ -37,6 +39,11 @@ export function PlantJournal({
   const [entryType, setEntryType] = useState<JournalEntryType>('watered');
   const [occurredOn, setOccurredOn] = useState(() => isoToDateInput(new Date().toISOString()));
   const [notes, setNotes] = useState('');
+  const [plantedOn, setPlantedOn] = useState(() => isoToDateInput(new Date().toISOString()));
+  const [savingPlantedOn, setSavingPlantedOn] = useState(false);
+
+  const plantedEntry = findPlantedEntry(entries);
+  const timelineEntries = entries.filter((entry) => entry.entry_type !== 'planted');
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -53,6 +60,48 @@ export function PlantJournal({
   useEffect(() => {
     void loadEntries();
   }, [loadEntries]);
+
+  useEffect(() => {
+    if (plantedEntry) {
+      setPlantedOn(isoToDateInput(plantedEntry.occurred_at));
+    }
+  }, [plantedEntry]);
+
+  const handleSavePlantedOn = async () => {
+    if (!plantedOn) return;
+    setSavingPlantedOn(true);
+    setError(null);
+    const occurred_at = dateInputToIso(plantedOn);
+
+    if (plantedEntry) {
+      const { data, error: updateError } = await updateJournalEntry(supabase, plantedEntry.id, {
+        occurred_at,
+      });
+      setSavingPlantedOn(false);
+      if (updateError) {
+        setError(updateError);
+        return;
+      }
+      if (data) {
+        setEntries((prev) => prev.map((e) => (e.id === data.id ? data : e)));
+      }
+      return;
+    }
+
+    const { data, error: createError } = await createJournalEntry(supabase, userId, placementId, {
+      entry_type: 'planted',
+      occurred_at,
+      notes: null,
+    });
+    setSavingPlantedOn(false);
+    if (createError) {
+      setError(createError);
+      return;
+    }
+    if (data) {
+      setEntries((prev) => [data, ...prev]);
+    }
+  };
 
   const handleAdd = async () => {
     setSaving(true);
@@ -92,6 +141,36 @@ export function PlantJournal({
       >
         Journal — {placementName}
       </h3>
+
+      <div className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+        <label htmlFor="planted-on" className="block text-xs font-medium text-gray-700">
+          Planted on
+        </label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id="planted-on"
+            type="date"
+            value={plantedOn}
+            onChange={(e) => setPlantedOn(e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+          />
+          <button
+            type="button"
+            disabled={savingPlantedOn || !plantedOn}
+            onClick={() => void handleSavePlantedOn()}
+            className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {savingPlantedOn ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+        {plantedEntry ? (
+          <p className="mt-1 text-xs text-gray-500">
+            Currently recorded as {formatJournalDate(plantedEntry.occurred_at)}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-500">No planted date yet — set one above.</p>
+        )}
+      </div>
 
       <div className="mb-3 space-y-2">
         <label htmlFor="journal-type" className="block text-xs font-medium text-gray-700">
@@ -147,7 +226,7 @@ export function PlantJournal({
 
       {loading ? (
         <p className="text-xs text-gray-500">Loading journal...</p>
-      ) : entries.length === 0 ? (
+      ) : timelineEntries.length === 0 ? (
         <p className="text-xs text-gray-500">No entries yet. Log watering, fertilizing, and growth milestones.</p>
       ) : (
         <ul
@@ -155,7 +234,7 @@ export function PlantJournal({
             fullPage ? 'space-y-2' : 'max-h-48 space-y-2 overflow-y-auto'
           }
         >
-          {entries.map((entry) => (
+          {timelineEntries.map((entry) => (
             <li
               key={entry.id}
               className="flex items-start justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"

@@ -7,9 +7,11 @@ import {
   createJournalEntry,
   dateInputToIso,
   deleteJournalEntry,
+  findPlantedEntry,
   formatJournalDate,
   isoToDateInput,
   listJournalEntries,
+  updateJournalEntry,
   type GardenJournalEntry,
   type JournalEntryType,
 } from '@gardening/shared';
@@ -37,6 +39,11 @@ export function PlantJournal({
   const [occurredOn, setOccurredOn] = useState(() => isoToDateInput(new Date().toISOString()));
   const [notes, setNotes] = useState('');
   const [expanded, setExpanded] = useState(fullPage);
+  const [plantedOn, setPlantedOn] = useState(() => isoToDateInput(new Date().toISOString()));
+  const [savingPlantedOn, setSavingPlantedOn] = useState(false);
+
+  const plantedEntry = findPlantedEntry(entries);
+  const timelineEntries = entries.filter((entry) => entry.entry_type !== 'planted');
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -53,6 +60,48 @@ export function PlantJournal({
   useEffect(() => {
     void loadEntries();
   }, [loadEntries]);
+
+  useEffect(() => {
+    if (plantedEntry) {
+      setPlantedOn(isoToDateInput(plantedEntry.occurred_at));
+    }
+  }, [plantedEntry]);
+
+  const handleSavePlantedOn = async () => {
+    if (!plantedOn) return;
+    setSavingPlantedOn(true);
+    setError(null);
+    const occurred_at = dateInputToIso(plantedOn);
+
+    if (plantedEntry) {
+      const { data, error: updateError } = await updateJournalEntry(supabase, plantedEntry.id, {
+        occurred_at,
+      });
+      setSavingPlantedOn(false);
+      if (updateError) {
+        setError(updateError);
+        return;
+      }
+      if (data) {
+        setEntries((prev) => prev.map((e) => (e.id === data.id ? data : e)));
+      }
+      return;
+    }
+
+    const { data, error: createError } = await createJournalEntry(supabase, userId, placementId, {
+      entry_type: 'planted',
+      occurred_at,
+      notes: null,
+    });
+    setSavingPlantedOn(false);
+    if (createError) {
+      setError(createError);
+      return;
+    }
+    if (data) {
+      setEntries((prev) => [data, ...prev]);
+    }
+  };
 
   const handleAdd = async () => {
     setSaving(true);
@@ -100,6 +149,31 @@ export function PlantJournal({
 
       {expanded ? (
         <View style={styles.body}>
+          <View style={styles.plantedOnCard}>
+            <Text style={styles.fieldLabel}>Planted on</Text>
+            <TextInput
+              style={styles.input}
+              value={plantedOn}
+              onChangeText={setPlantedOn}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#6b7280"
+            />
+            <Pressable
+              style={[styles.savePlantedButton, savingPlantedOn && styles.buttonDisabled]}
+              onPress={() => void handleSavePlantedOn()}
+              disabled={savingPlantedOn || !plantedOn}
+            >
+              <Text style={styles.savePlantedButtonText}>
+                {savingPlantedOn ? 'Saving...' : 'Save planted date'}
+              </Text>
+            </Pressable>
+            <Text style={styles.plantedOnHint}>
+              {plantedEntry
+                ? `Currently recorded as ${formatJournalDate(plantedEntry.occurred_at)}`
+                : 'No planted date yet — set one above.'}
+            </Text>
+          </View>
+
           <Text style={styles.fieldLabel}>Event type</Text>
           <View style={styles.typeRow}>
             {JOURNAL_ENTRY_TYPES.map((type) => (
@@ -148,10 +222,10 @@ export function PlantJournal({
 
           {loading ? (
             <ActivityIndicator color="#059669" style={styles.loader} />
-          ) : entries.length === 0 ? (
+          ) : timelineEntries.length === 0 ? (
             <Text style={styles.empty}>No entries yet.</Text>
           ) : (
-            entries.map((entry) => (
+            timelineEntries.map((entry) => (
               <View key={entry.id} style={styles.entry}>
                 <View style={styles.entryBody}>
                   <Text style={styles.entryTitle}>{JOURNAL_ENTRY_LABELS[entry.entry_type]}</Text>
@@ -176,6 +250,23 @@ const styles = StyleSheet.create({
   heading: { fontSize: 15, fontWeight: '600', color: '#064e3b', marginBottom: 8 },
   headingPage: { fontSize: 18, fontWeight: '600', color: '#064e3b', marginBottom: 12 },
   body: { gap: 4 },
+  plantedOnCard: {
+    backgroundColor: '#ecfdf5',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    padding: 12,
+    marginBottom: 8,
+  },
+  plantedOnHint: { fontSize: 11, color: '#6b7280', marginTop: 6 },
+  savePlantedButton: {
+    marginTop: 8,
+    backgroundColor: '#047857',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  savePlantedButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   fieldLabel: { fontSize: 12, fontWeight: '500', color: '#374151', marginTop: 8, marginBottom: 4 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   typeChip: {

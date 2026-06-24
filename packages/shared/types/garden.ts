@@ -111,6 +111,17 @@ export const createJournalEntrySchema = z.object({
 
 export type CreateJournalEntryInput = z.infer<typeof createJournalEntrySchema>;
 
+export const updateJournalEntrySchema = z
+  .object({
+    occurred_at: z.string().datetime({ message: 'Invalid date' }).optional(),
+    notes: z.string().trim().max(2000).nullish().optional(),
+  })
+  .refine((data) => data.occurred_at !== undefined || data.notes !== undefined, {
+    message: 'No fields to update',
+  });
+
+export type UpdateJournalEntryInput = z.infer<typeof updateJournalEntrySchema>;
+
 export const REMINDER_TYPES = [
   'watered',
   'fertilized',

@@ -65,6 +65,8 @@ export default function GardenMap() {
   const [reminders, setReminders] = useState<GardenReminder[]>([]);
   const [mapFilters, setMapFilters] = useState<PlantMapFilters>(DEFAULT_PLANT_MAP_FILTERS);
   const [compactMarkers, setCompactMarkers] = useState(false);
+  const [adjustMode, setAdjustMode] = useState(false);
+  const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -155,6 +157,7 @@ export default function GardenMap() {
   }, []);
 
   const handleMapClick = (event: MapMouseEvent) => {
+    if (adjustMode) return;
     setSelectedId(null);
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
@@ -260,6 +263,46 @@ export default function GardenMap() {
     setCatalogSearch('');
   };
 
+  const handlePlacementDragEnd = async (
+    placementId: string,
+    latitude: number,
+    longitude: number
+  ) => {
+    const previous = placements.find((p) => p.id === placementId);
+    if (!previous) return;
+    if (previous.latitude === latitude && previous.longitude === longitude) return;
+
+    setSavingPositionId(placementId);
+    setError(null);
+    setPlacements((prev) =>
+      prev.map((p) => (p.id === placementId ? { ...p, latitude, longitude } : p))
+    );
+
+    const { data, error: updateError } = await updatePlacement(supabase, placementId, {
+      latitude,
+      longitude,
+    });
+
+    setSavingPositionId(null);
+    if (updateError) {
+      setError(updateError);
+      setPlacements((prev) => prev.map((p) => (p.id === placementId ? previous : p)));
+      return;
+    }
+    if (data) {
+      setPlacements((prev) => prev.map((p) => (p.id === data.id ? data : p)));
+    }
+  };
+
+  const toggleAdjustMode = () => {
+    setAdjustMode((active) => {
+      if (!active) {
+        setPendingPin(null);
+      }
+      return !active;
+    });
+  };
+
   const selectPlacement = (placement: GardenPlacement) => {
     setPendingPin(null);
     setSelectedId(placement.id);
@@ -343,8 +386,20 @@ export default function GardenMap() {
           </nav>
           <button
             type="button"
+            onClick={toggleAdjustMode}
+            className={`mt-2 rounded-lg border px-2.5 py-1 text-sm ${
+              adjustMode
+                ? 'border-amber-300 bg-amber-50 text-amber-900'
+                : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+            }`}
+            aria-pressed={adjustMode}
+          >
+            {adjustMode ? 'Done adjusting' : 'Adjust locations'}
+          </button>
+          <button
+            type="button"
             onClick={() => void signOut()}
-            className="mt-2 text-sm text-emerald-600 hover:underline"
+            className="mt-2 block text-sm text-emerald-600 hover:underline"
           >
             Sign out
           </button>
@@ -370,6 +425,11 @@ export default function GardenMap() {
           )}
           {!loading && placements.length > 0 && filteredPlacements.length === 0 && (
             <p className="text-sm text-gray-500">No plants match these filters.</p>
+          )}
+          {adjustMode && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Adjustment mode — drag markers on the map to reposition plants.
+            </p>
           )}
           <ul className="space-y-2">
             {filteredPlacements.map((placement) => (
@@ -407,7 +467,7 @@ export default function GardenMap() {
           </ul>
         </div>
 
-        {(pendingPin || selectedPlacement) && (
+        {(pendingPin || selectedPlacement) && !adjustMode && (
           <div className="border-t border-emerald-100 p-4">
             <h2 className="mb-2 text-sm font-medium text-gray-900">
               {pendingPin ? 'New plant' : 'Edit plant'}
@@ -559,7 +619,7 @@ export default function GardenMap() {
           </div>
         </form>
 
-        <div className="absolute bottom-4 left-4 z-10">
+        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
           <button
             type="button"
             onClick={() => setCompactMarkers((value) => !value)}
@@ -568,7 +628,25 @@ export default function GardenMap() {
           >
             {compactMarkers ? 'Show names' : 'Dots only'}
           </button>
+          <button
+            type="button"
+            onClick={toggleAdjustMode}
+            className={`rounded-lg px-3 py-2 text-sm font-medium shadow-lg ring-1 ring-black/5 ${
+              adjustMode
+                ? 'bg-amber-100 text-amber-900 ring-amber-200 hover:bg-amber-200'
+                : 'bg-white text-emerald-800 hover:bg-emerald-50'
+            }`}
+            aria-pressed={adjustMode}
+          >
+            {adjustMode ? 'Done adjusting' : 'Adjust locations'}
+          </button>
         </div>
+
+        {adjustMode && (
+          <div className="pointer-events-none absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-lg bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 shadow-lg ring-1 ring-amber-200">
+            Drag plants to reposition{savingPositionId ? ' — saving…' : ''}
+          </div>
+        )}
 
         <div className="absolute bottom-4 right-4 z-10 hidden max-w-xs md:block">
           <GardenWeather
@@ -592,6 +670,14 @@ export default function GardenMap() {
               latitude={placement.latitude}
               longitude={placement.longitude}
               anchor={compactMarkers ? 'center' : 'bottom'}
+              draggable={adjustMode}
+              onDragEnd={(event) => {
+                void handlePlacementDragEnd(
+                  placement.id,
+                  event.lngLat.lat,
+                  event.lngLat.lng
+                );
+              }}
               onClick={(e) => {
                 e.originalEvent.stopPropagation();
                 selectPlacement(placement);
@@ -601,6 +687,8 @@ export default function GardenMap() {
                 <div
                   className={`h-3.5 w-3.5 rounded-full border-2 border-white shadow ${
                     selectedId === placement.id ? 'bg-emerald-700' : 'bg-emerald-500'
+                  } ${adjustMode ? 'cursor-grab ring-2 ring-amber-300 ring-offset-1' : ''} ${
+                    savingPositionId === placement.id ? 'opacity-70' : ''
                   }`}
                   title={placement.name}
                 />
@@ -608,6 +696,8 @@ export default function GardenMap() {
                 <div
                   className={`rounded-full px-2 py-1 text-xs font-medium text-white shadow ${
                     selectedId === placement.id ? 'bg-emerald-700' : 'bg-emerald-500'
+                  } ${adjustMode ? 'cursor-grab ring-2 ring-amber-300' : ''} ${
+                    savingPositionId === placement.id ? 'opacity-70' : ''
                   }`}
                 >
                   {placement.name}

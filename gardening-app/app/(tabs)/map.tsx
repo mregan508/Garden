@@ -86,6 +86,8 @@ export default function MapScreen() {
   const [reminders, setReminders] = useState<GardenReminder[]>([]);
   const [mapFilters, setMapFilters] = useState<PlantMapFilters>(DEFAULT_PLANT_MAP_FILTERS);
   const [compactMarkers, setCompactMarkers] = useState(false);
+  const [adjustMode, setAdjustMode] = useState(false);
+  const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -180,6 +182,11 @@ export default function MapScreen() {
   };
 
   const openEditModal = (placement: GardenPlacement) => {
+    if (adjustMode) {
+      setSelectedId(placement.id);
+      flyTo(placement.longitude, placement.latitude);
+      return;
+    }
     setPendingPin(null);
     setSelectedId(placement.id);
     setPlantName(placement.name);
@@ -192,6 +199,7 @@ export default function MapScreen() {
   };
 
   const handleMapPress = (event: { geometry?: { coordinates?: number[] } }) => {
+    if (adjustMode) return;
     const coords = event.geometry?.coordinates;
     if (!coords || coords.length < 2) return;
     const [longitude, latitude] = coords;
@@ -337,6 +345,47 @@ export default function MapScreen() {
     ]);
   };
 
+  const handlePlacementDragEnd = async (
+    placementId: string,
+    latitude: number,
+    longitude: number
+  ) => {
+    const previous = placements.find((p) => p.id === placementId);
+    if (!previous) return;
+    if (previous.latitude === latitude && previous.longitude === longitude) return;
+
+    setSavingPositionId(placementId);
+    setError(null);
+    setPlacements((prev) =>
+      prev.map((p) => (p.id === placementId ? { ...p, latitude, longitude } : p))
+    );
+
+    const { data, error: updateError } = await updatePlacement(supabase, placementId, {
+      latitude,
+      longitude,
+    });
+
+    setSavingPositionId(null);
+    if (updateError) {
+      setError(updateError);
+      setPlacements((prev) => prev.map((p) => (p.id === placementId ? previous : p)));
+      return;
+    }
+    if (data) {
+      setPlacements((prev) => prev.map((p) => (p.id === data.id ? data : p)));
+    }
+  };
+
+  const toggleAdjustMode = () => {
+    setAdjustMode((active) => {
+      if (!active) {
+        setPendingPin(null);
+        setModalVisible(false);
+      }
+      return !active;
+    });
+  };
+
   if (!isMapboxConfigured()) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -427,13 +476,22 @@ export default function MapScreen() {
               key={placement.id}
               id={placement.id}
               coordinate={[placement.longitude, placement.latitude]}
+              draggable={adjustMode}
               onSelected={() => openEditModal(placement)}
+              onDragEnd={(feature) => {
+                const coords = feature.geometry?.coordinates;
+                if (!coords || coords.length < 2) return;
+                const [longitude, latitude] = coords;
+                void handlePlacementDragEnd(placement.id, latitude, longitude);
+              }}
             >
               {compactMarkers ? (
                 <View
                   style={[
                     styles.markerDot,
                     selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
+                    adjustMode && styles.markerAdjustable,
+                    savingPositionId === placement.id && styles.markerSaving,
                   ]}
                 />
               ) : (
@@ -441,6 +499,8 @@ export default function MapScreen() {
                   style={[
                     styles.marker,
                     selectedId === placement.id ? styles.markerSelected : styles.markerDefault,
+                    adjustMode && styles.markerAdjustable,
+                    savingPositionId === placement.id && styles.markerSaving,
                   ]}
                 >
                   <Text style={styles.markerText}>{placement.name}</Text>
@@ -476,6 +536,33 @@ export default function MapScreen() {
             {compactMarkers ? 'Show names' : 'Dots only'}
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[
+            styles.adjustModeToggle,
+            adjustMode && styles.adjustModeToggleActive,
+          ]}
+          onPress={toggleAdjustMode}
+          accessibilityRole="button"
+          accessibilityState={{ selected: adjustMode }}
+        >
+          <Text
+            style={[
+              styles.adjustModeToggleText,
+              adjustMode && styles.adjustModeToggleTextActive,
+            ]}
+          >
+            {adjustMode ? 'Done adjusting' : 'Adjust locations'}
+          </Text>
+        </Pressable>
+
+        {adjustMode ? (
+          <View style={styles.adjustModeBanner} pointerEvents="none">
+            <Text style={styles.adjustModeBannerText}>
+              Drag plants to reposition{savingPositionId ? ' — saving…' : ''}
+            </Text>
+          </View>
+        ) : null}
 
         <Pressable
           style={styles.plantListToggle}
@@ -762,6 +849,42 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   compactMarkersToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
+  adjustModeToggle: {
+    position: 'absolute',
+    top: 136,
+    left: 12,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  adjustModeToggleActive: {
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+  },
+  adjustModeToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
+  adjustModeToggleTextActive: { color: '#92400e' },
+  adjustModeBanner: {
+    position: 'absolute',
+    top: 196,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+    backgroundColor: 'rgba(254,243,199,0.95)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  adjustModeBannerText: { color: '#92400e', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   addressSearchWrap: {
     position: 'absolute',
     top: 12,
@@ -829,6 +952,11 @@ const styles = StyleSheet.create({
   },
   markerDefault: { backgroundColor: '#10b981' },
   markerSelected: { backgroundColor: '#047857' },
+  markerAdjustable: {
+    borderColor: '#fcd34d',
+    borderWidth: 3,
+  },
+  markerSaving: { opacity: 0.7 },
   markerPending: {
     width: 16,
     height: 16,
