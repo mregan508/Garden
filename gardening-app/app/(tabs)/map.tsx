@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Camera, MapView, PointAnnotation } from '@rnmapbox/maps';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@gardening/shared';
@@ -29,6 +30,8 @@ import {
   listPlantCatalogVarieties,
   listPlacements,
   listReminders,
+  markPlacementsWatered,
+  rainAutoWaterStorageKey,
   searchAddress,
   updatePlacement,
   type CareFilter,
@@ -88,6 +91,28 @@ export default function MapScreen() {
   const [compactMarkers, setCompactMarkers] = useState(false);
   const [adjustMode, setAdjustMode] = useState(false);
   const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
+  const [isIndoor, setIsIndoor] = useState(false);
+  const [wateringAll, setWateringAll] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [rainAutoWaterDate, setRainAutoWaterDateState] = useState<string | null>(null);
+
+  const getRainAutoWaterDate = useCallback(() => rainAutoWaterDate, [rainAutoWaterDate]);
+  const setRainAutoWaterDate = useCallback(
+    (date: string) => {
+      setRainAutoWaterDateState(date);
+      if (user) {
+        void AsyncStorage.setItem(rainAutoWaterStorageKey(user.id), date);
+      }
+    },
+    [user]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    void AsyncStorage.getItem(rainAutoWaterStorageKey(user.id)).then((value) => {
+      setRainAutoWaterDateState(value);
+    });
+  }, [user]);
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -175,6 +200,7 @@ export default function MapScreen() {
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
     setCatalogSearch('');
+    setIsIndoor(false);
     setPendingPin({ latitude, longitude });
     setPlantName('');
     setModalVisible(true);
@@ -193,6 +219,7 @@ export default function MapScreen() {
     setSelectedCatalogId(placement.plant_catalog_id ?? null);
     setSelectedVarietyId(placement.plant_catalog_variety_id ?? null);
     setCatalogSearch('');
+    setIsIndoor(placement.is_indoor ?? false);
     setModalVisible(true);
     setShowPlantList(false);
     flyTo(placement.longitude, placement.latitude);
@@ -214,6 +241,25 @@ export default function MapScreen() {
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
     setCatalogSearch('');
+    setIsIndoor(false);
+  };
+
+  const handleMarkAllWatered = async () => {
+    if (!user || placements.length === 0) return;
+    setWateringAll(true);
+    setError(null);
+    setNotice(null);
+    const { wateredCount, error: waterError } = await markPlacementsWatered(
+      supabase,
+      user.id,
+      placements
+    );
+    setWateringAll(false);
+    if (waterError) {
+      setError(waterError);
+      return;
+    }
+    setNotice(`Marked ${wateredCount} plant${wateredCount === 1 ? '' : 's'} as watered.`);
   };
 
   const selectCatalogEntry = (entry: PlantCatalogEntry) => {
@@ -285,6 +331,7 @@ export default function MapScreen() {
         longitude: pendingPin.longitude,
         plant_catalog_id: selectedCatalogId,
         plant_catalog_variety_id: selectedVarietyId,
+        is_indoor: isIndoor,
       });
       setSaving(false);
       if (createError) {
@@ -308,6 +355,7 @@ export default function MapScreen() {
         name: plantName.trim(),
         plant_catalog_id: selectedCatalogId,
         plant_catalog_variety_id: selectedVarietyId,
+        is_indoor: isIndoor,
       });
       setSaving(false);
       if (updateError) {
@@ -522,6 +570,7 @@ export default function MapScreen() {
           <GardenWeather
             latitude={weatherLocation.latitude}
             longitude={weatherLocation.longitude}
+            placements={placements}
             compact
           />
         </View>
@@ -579,7 +628,29 @@ export default function MapScreen() {
               <GardenWeather
                 latitude={weatherLocation.latitude}
                 longitude={weatherLocation.longitude}
+                placements={placements}
+                userId={user?.id}
+                supabase={supabase}
+                getRainAutoWaterDate={getRainAutoWaterDate}
+                setRainAutoWaterDate={setRainAutoWaterDate}
+                onRainAutoWatered={(count) =>
+                  setNotice(
+                    `Substantial rain detected — marked ${count} outdoor plant${count === 1 ? '' : 's'} as watered.`
+                  )
+                }
               />
+              {placements.length > 0 ? (
+                <Pressable
+                  style={[styles.markAllWateredButton, wateringAll && styles.buttonDisabled]}
+                  onPress={() => void handleMarkAllWatered()}
+                  disabled={wateringAll}
+                >
+                  <Text style={styles.markAllWateredButtonText}>
+                    {wateringAll ? 'Marking watered...' : 'Mark all plants watered'}
+                  </Text>
+                </Pressable>
+              ) : null}
+              {notice ? <Text style={styles.noticeText}>{notice}</Text> : null}
               <Text style={styles.filterHeading}>
                 Filter plants ({filteredPlacements.length} of {placements.length})
               </Text>
@@ -651,6 +722,9 @@ export default function MapScreen() {
                     >
                       <Text style={styles.plantListName}>
                         {placement.name}
+                        {placement.is_indoor ? (
+                          <Text style={styles.plantListIndoor}> · Indoor</Text>
+                        ) : null}
                         {placement.plant_catalog_id ? (
                           <Text style={styles.plantListCatalog}> catalog</Text>
                         ) : null}
@@ -770,6 +844,18 @@ export default function MapScreen() {
                   }
                 }}
               />
+
+              <Pressable
+                style={styles.indoorToggle}
+                onPress={() => setIsIndoor((value) => !value)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isIndoor }}
+              >
+                <View style={[styles.indoorCheckbox, isIndoor && styles.indoorCheckboxChecked]} />
+                <Text style={styles.indoorToggleText}>
+                  Indoor plant (exempt from rain, cold, and outdoor weather care)
+                </Text>
+              </Pressable>
 
               {selectedPlacement && !pendingPin ? (
                 <Pressable
@@ -1054,6 +1140,7 @@ const styles = StyleSheet.create({
   plantListJournalText: { fontSize: 12, fontWeight: '600', color: '#047857' },
   plantListItemSelected: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   plantListName: { fontSize: 14, fontWeight: '600', color: '#064e3b' },
+  plantListIndoor: { fontSize: 12, fontWeight: '500', color: '#6d28d9' },
   plantListCatalog: { fontSize: 12, fontWeight: '400', color: '#059669' },
   plantListCoords: { fontSize: 11, color: '#6b7280', marginTop: 2 },
   errorText: {
@@ -1113,6 +1200,47 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#fff',
     marginBottom: 12,
+  },
+  indoorToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  indoorCheckbox: {
+    marginTop: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#9ca3af',
+    backgroundColor: '#fff',
+  },
+  indoorCheckboxChecked: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  indoorToggleText: { flex: 1, fontSize: 14, color: '#374151' },
+  markAllWateredButton: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  markAllWateredButtonText: { color: '#1e3a8a', fontWeight: '600', fontSize: 14 },
+  noticeText: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    color: '#1e3a8a',
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   journalButton: {
     marginBottom: 12,

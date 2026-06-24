@@ -14,6 +14,8 @@ export interface GardenPlacement {
   plant_catalog_id?: string | null;
   /** Nullable FK to plant_catalog_variety — cultivar / subspecies */
   plant_catalog_variety_id?: string | null;
+  /** Indoor plants are exempt from outdoor weather care features */
+  is_indoor?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,7 @@ export const createPlacementSchema = z.object({
   longitude: z.number().min(-180).max(180),
   plant_catalog_id: z.string().uuid().nullish(),
   plant_catalog_variety_id: z.string().uuid().nullish(),
+  is_indoor: z.boolean().optional(),
 });
 
 export const updatePlacementSchema = z.object({
@@ -57,6 +60,7 @@ export const updatePlacementSchema = z.object({
   longitude: z.number().min(-180).max(180).optional(),
   plant_catalog_id: z.string().uuid().nullish(),
   plant_catalog_variety_id: z.string().uuid().nullish(),
+  is_indoor: z.boolean().optional(),
 });
 
 export type CreatePlacementInput = z.infer<typeof createPlacementSchema>;

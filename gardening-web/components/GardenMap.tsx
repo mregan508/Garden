@@ -17,6 +17,8 @@ import {
   listPlantCatalogVarieties,
   listPlacements,
   listReminders,
+  markPlacementsWatered,
+  rainAutoWaterStorageKey,
   updatePlacement,
   useAuth,
   type GardenPlacement,
@@ -67,6 +69,22 @@ export default function GardenMap() {
   const [compactMarkers, setCompactMarkers] = useState(false);
   const [adjustMode, setAdjustMode] = useState(false);
   const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
+  const [isIndoor, setIsIndoor] = useState(false);
+  const [wateringAll, setWateringAll] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const rainStorageKey = user ? rainAutoWaterStorageKey(user.id) : null;
+  const getRainAutoWaterDate = useCallback(() => {
+    if (!rainStorageKey || typeof window === 'undefined') return null;
+    return localStorage.getItem(rainStorageKey);
+  }, [rainStorageKey]);
+  const setRainAutoWaterDate = useCallback(
+    (date: string) => {
+      if (!rainStorageKey || typeof window === 'undefined') return;
+      localStorage.setItem(rainStorageKey, date);
+    },
+    [rainStorageKey]
+  );
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -162,6 +180,7 @@ export default function GardenMap() {
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
     setCatalogSearch('');
+    setIsIndoor(false);
     setPendingPin({
       latitude: event.lngLat.lat,
       longitude: event.lngLat.lng,
@@ -204,6 +223,7 @@ export default function GardenMap() {
       longitude: pendingPin.longitude,
       plant_catalog_id: selectedCatalogId,
       plant_catalog_variety_id: selectedVarietyId,
+      is_indoor: isIndoor,
     });
     setSaving(false);
     if (createError) {
@@ -224,6 +244,7 @@ export default function GardenMap() {
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
     setCatalogSearch('');
+    setIsIndoor(false);
   };
 
   const handleUpdateSelected = async () => {
@@ -234,6 +255,7 @@ export default function GardenMap() {
       name: plantName.trim(),
       plant_catalog_id: selectedCatalogId,
       plant_catalog_variety_id: selectedVarietyId,
+      is_indoor: isIndoor,
     });
     setSaving(false);
     if (updateError) {
@@ -261,6 +283,25 @@ export default function GardenMap() {
     setSelectedCatalogId(null);
     setSelectedVarietyId(null);
     setCatalogSearch('');
+    setIsIndoor(false);
+  };
+
+  const handleMarkAllWatered = async () => {
+    if (!user || placements.length === 0) return;
+    setWateringAll(true);
+    setError(null);
+    setNotice(null);
+    const { wateredCount, error: waterError } = await markPlacementsWatered(
+      supabase,
+      user.id,
+      placements
+    );
+    setWateringAll(false);
+    if (waterError) {
+      setError(waterError);
+      return;
+    }
+    setNotice(`Marked ${wateredCount} plant${wateredCount === 1 ? '' : 's'} as watered.`);
   };
 
   const handlePlacementDragEnd = async (
@@ -310,6 +351,7 @@ export default function GardenMap() {
     setSelectedCatalogId(placement.plant_catalog_id ?? null);
     setSelectedVarietyId(placement.plant_catalog_variety_id ?? null);
     setCatalogSearch('');
+    setIsIndoor(placement.is_indoor ?? false);
     setViewState((prev) => ({
       ...prev,
       latitude: placement.latitude,
@@ -410,8 +452,33 @@ export default function GardenMap() {
             <GardenWeather
               latitude={weatherLocation.latitude}
               longitude={weatherLocation.longitude}
+              placements={placements}
+              userId={user?.id}
+              supabase={supabase}
+              getRainAutoWaterDate={getRainAutoWaterDate}
+              setRainAutoWaterDate={setRainAutoWaterDate}
+              onRainAutoWatered={(count) =>
+                setNotice(
+                  `Substantial rain detected — marked ${count} outdoor plant${count === 1 ? '' : 's'} as watered.`
+                )
+              }
             />
           </div>
+          {!loading && placements.length > 0 ? (
+            <button
+              type="button"
+              disabled={wateringAll}
+              onClick={() => void handleMarkAllWatered()}
+              className="mb-4 w-full rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 hover:bg-sky-100 disabled:opacity-50"
+            >
+              {wateringAll ? 'Marking watered...' : 'Mark all plants watered'}
+            </button>
+          ) : null}
+          {notice ? (
+            <p className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+              {notice}
+            </p>
+          ) : null}
           <PlantMapFiltersPanel
             filters={mapFilters}
             onChange={setMapFilters}
@@ -444,6 +511,11 @@ export default function GardenMap() {
                   }`}
                 >
                   <span className="font-medium text-emerald-900">{placement.name}</span>
+                  {placement.is_indoor ? (
+                    <span className="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
+                      Indoor
+                    </span>
+                  ) : null}
                   {placement.plant_catalog_id && (
                     <span className="ml-1 text-xs text-emerald-600">
                       {placement.plant_catalog_variety_id
@@ -514,6 +586,15 @@ export default function GardenMap() {
               placeholder="Plant name"
               className="mb-3 w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
             />
+            <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={isIndoor}
+                onChange={(e) => setIsIndoor(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-400 text-emerald-600 focus:ring-emerald-600"
+              />
+              Indoor plant (exempt from rain, cold, and outdoor weather care)
+            </label>
             <div className="flex gap-2">
               {pendingPin ? (
                 <>
@@ -533,6 +614,7 @@ export default function GardenMap() {
                       setSelectedCatalogId(null);
                       setSelectedVarietyId(null);
                       setCatalogSearch('');
+                      setIsIndoor(false);
                     }}
                     className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
                   >
@@ -652,6 +734,7 @@ export default function GardenMap() {
           <GardenWeather
             latitude={weatherLocation.latitude}
             longitude={weatherLocation.longitude}
+            placements={placements}
             compact
           />
         </div>

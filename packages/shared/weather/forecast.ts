@@ -11,6 +11,7 @@ export interface DailyForecast {
   highF: number;
   lowF: number;
   precipChance: number;
+  precipSumIn: number;
   weatherCode: number;
   weatherLabel: string;
 }
@@ -51,6 +52,37 @@ export function weatherCodeLabel(code: number): string {
   return WMO_LABELS[code] ?? 'Unknown';
 }
 
+const HEAVY_RAIN_WEATHER_CODES = new Set([63, 65, 80, 81, 82, 95, 96, 99]);
+
+export const SUBSTANTIAL_RAIN_MIN_INCHES = 0.25;
+
+export function isRainWeatherCode(code: number): boolean {
+  return HEAVY_RAIN_WEATHER_CODES.has(code) || code === 61;
+}
+
+export function isSubstantialRain(forecast: GardenWeatherForecast): boolean {
+  const { current } = forecast;
+  if (current.precipitationIn >= SUBSTANTIAL_RAIN_MIN_INCHES) {
+    return true;
+  }
+  if (HEAVY_RAIN_WEATHER_CODES.has(current.weatherCode)) {
+    return true;
+  }
+  const today = forecast.daily[0];
+  if (today && today.precipSumIn >= SUBSTANTIAL_RAIN_MIN_INCHES) {
+    return true;
+  }
+  return false;
+}
+
+export function isFrostRisk(lowF: number): boolean {
+  return lowF <= 32;
+}
+
+export function todayDateKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function gardenCenter(
   placements: { latitude: number; longitude: number }[]
 ): { latitude: number; longitude: number } | null {
@@ -70,7 +102,7 @@ export async function fetchGardenWeather(
     latitude: latitude.toFixed(4),
     longitude: longitude.toFixed(4),
     current: 'temperature_2m,relative_humidity_2m,precipitation,weather_code',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum',
     temperature_unit: 'fahrenheit',
     precipitation_unit: 'inch',
     timezone: 'auto',
@@ -99,6 +131,7 @@ export async function fetchGardenWeather(
         temperature_2m_max: number[];
         temperature_2m_min: number[];
         precipitation_probability_max: number[];
+        precipitation_sum: number[];
       };
     };
 
@@ -108,6 +141,7 @@ export async function fetchGardenWeather(
       highF: Math.round(json.daily.temperature_2m_max[i] ?? 0),
       lowF: Math.round(json.daily.temperature_2m_min[i] ?? 0),
       precipChance: json.daily.precipitation_probability_max[i] ?? 0,
+      precipSumIn: json.daily.precipitation_sum[i] ?? 0,
       weatherCode: json.daily.weather_code[i] ?? 0,
       weatherLabel: weatherCodeLabel(json.daily.weather_code[i] ?? 0),
     }));

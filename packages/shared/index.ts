@@ -6,6 +6,7 @@ export * from './garden/catalog';
 export * from './garden/varieties';
 export * from './garden/journal';
 export * from './garden/reminders';
+export * from './garden/watering';
 export * from './garden/filters';
 export * from './weather/forecast';
 export * from './mapbox/geocode';
