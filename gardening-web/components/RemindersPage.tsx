@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   REMINDER_TYPE_LABELS,
@@ -18,22 +18,21 @@ export function RemindersPage() {
   const [error, setError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
 
-  const loadReminders = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
-    const { data, error: listError } = await listReminders(supabase, user.id);
-    if (listError) {
-      setError(listError);
-    } else {
-      setReminders(data.filter((r) => r.enabled));
-    }
-    setLoading(false);
-  }, [supabase, user]);
-
   useEffect(() => {
-    void loadReminders();
-  }, [loadReminders]);
+    if (!user) return;
+
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      const { data, error: listError } = await listReminders(supabase, user.id);
+      if (listError) {
+        setError(listError);
+      } else {
+        setReminders(data.filter((r) => r.enabled));
+      }
+      setLoading(false);
+    })();
+  }, [supabase, user]);
 
   const { overdue, upcoming } = useMemo(() => {
     const now = new Date();

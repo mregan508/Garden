@@ -153,8 +153,10 @@ export default function GardenMap() {
   }, [supabase, user]);
 
   useEffect(() => {
-    void loadPlacements();
-    void loadCatalog();
+    void (async () => {
+      await loadPlacements();
+      await loadCatalog();
+    })();
   }, [loadPlacements, loadCatalog]);
 
   useEffect(() => {

@@ -48,6 +48,16 @@ cd gardening-web && npm run dev
 cd gardening-app && npm start
 ```
 
+## Verify (local / CI)
+
+From the repo root after `npm run install:all`:
+
+```bash
+npm run verify   # typecheck shared + web + mobile, lint web
+```
+
+GitHub Actions runs the same checks on every push and pull request to `main`.
+
 ## Phase 1
 
 - Email/password auth (Supabase)

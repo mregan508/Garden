@@ -82,10 +82,11 @@ export function GardenWeather({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    void fetchGardenWeather(latitude, longitude).then(({ data, error: fetchError }) => {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      const { data, error: fetchError } = await fetchGardenWeather(latitude, longitude);
       if (cancelled) return;
       setLoading(false);
       if (fetchError) {
@@ -94,7 +95,7 @@ export function GardenWeather({
         return;
       }
       setForecast(data);
-    });
+    })();
 
     return () => {
       cancelled = true;

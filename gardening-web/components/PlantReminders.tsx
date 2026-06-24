@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   REMINDER_TYPES,
@@ -29,21 +29,19 @@ export function PlantReminders({ supabase, userId, placementId }: PlantReminders
   const [draftType, setDraftType] = useState<ReminderType>('watered');
   const [draftInterval, setDraftInterval] = useState(String(getDefaultIntervalDays('watered')));
 
-  const loadReminders = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const { data, error: listError } = await listRemindersForPlacement(supabase, placementId);
-    if (listError) {
-      setError(listError);
-    } else {
-      setReminders(data);
-    }
-    setLoading(false);
-  }, [supabase, placementId]);
-
   useEffect(() => {
-    void loadReminders();
-  }, [loadReminders]);
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      const { data, error: listError } = await listRemindersForPlacement(supabase, placementId);
+      if (listError) {
+        setError(listError);
+      } else {
+        setReminders(data);
+      }
+      setLoading(false);
+    })();
+  }, [supabase, placementId]);
 
   const handleAdd = async () => {
     const intervalDays = Number.parseInt(draftInterval, 10);

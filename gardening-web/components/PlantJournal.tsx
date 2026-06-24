@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   JOURNAL_ENTRY_LABELS,
@@ -39,33 +39,30 @@ export function PlantJournal({
   const [entryType, setEntryType] = useState<JournalEntryType>('watered');
   const [occurredOn, setOccurredOn] = useState(() => isoToDateInput(new Date().toISOString()));
   const [notes, setNotes] = useState('');
-  const [plantedOn, setPlantedOn] = useState(() => isoToDateInput(new Date().toISOString()));
+  const [plantedOnDraft, setPlantedOnDraft] = useState<string | null>(null);
   const [savingPlantedOn, setSavingPlantedOn] = useState(false);
 
   const plantedEntry = findPlantedEntry(entries);
   const timelineEntries = entries.filter((entry) => entry.entry_type !== 'planted');
+  const plantedOn =
+    plantedOnDraft ??
+    (plantedEntry
+      ? isoToDateInput(plantedEntry.occurred_at)
+      : isoToDateInput(new Date().toISOString()));
 
-  const loadEntries = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const { data, error: listError } = await listJournalEntries(supabase, placementId);
-    if (listError) {
-      setError(listError);
-    } else {
-      setEntries(data);
-    }
-    setLoading(false);
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      const { data, error: listError } = await listJournalEntries(supabase, placementId);
+      if (listError) {
+        setError(listError);
+      } else {
+        setEntries(data);
+      }
+      setLoading(false);
+    })();
   }, [supabase, placementId]);
-
-  useEffect(() => {
-    void loadEntries();
-  }, [loadEntries]);
-
-  useEffect(() => {
-    if (plantedEntry) {
-      setPlantedOn(isoToDateInput(plantedEntry.occurred_at));
-    }
-  }, [plantedEntry]);
 
   const handleSavePlantedOn = async () => {
     if (!plantedOn) return;
@@ -84,6 +81,7 @@ export function PlantJournal({
       }
       if (data) {
         setEntries((prev) => prev.map((e) => (e.id === data.id ? data : e)));
+        setPlantedOnDraft(null);
       }
       return;
     }
@@ -100,6 +98,7 @@ export function PlantJournal({
     }
     if (data) {
       setEntries((prev) => [data, ...prev]);
+      setPlantedOnDraft(null);
     }
   };
 
@@ -151,7 +150,7 @@ export function PlantJournal({
             id="planted-on"
             type="date"
             value={plantedOn}
-            onChange={(e) => setPlantedOn(e.target.value)}
+            onChange={(e) => setPlantedOnDraft(e.target.value)}
             className="min-w-0 flex-1 rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           />
           <button

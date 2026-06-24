@@ -33,7 +33,7 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-This applies `supabase/migrations/20250623120000_create_garden_placements.sql`.
+This applies every SQL file in `supabase/migrations/` in timestamp order (placements, catalog, journal, indoor flag, and later additions).
 
 ## 4. Verify RLS
 
