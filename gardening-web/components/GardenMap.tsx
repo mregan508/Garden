@@ -18,7 +18,10 @@ import {
   listPlacements,
   listReminders,
   markPlacementsWatered,
+  mapStyleForPropertyLines,
+  PROPERTY_LINES_STORAGE_KEY,
   rainAutoWaterStorageKey,
+  readStoredPropertyLinesPreference,
   updatePlacement,
   useAuth,
   type GardenPlacement,
@@ -72,6 +75,18 @@ export default function GardenMap() {
   const [isIndoor, setIsIndoor] = useState(false);
   const [wateringAll, setWateringAll] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showPropertyLines, setShowPropertyLines] = useState(() => {
+    if (typeof window === 'undefined') {
+      return readStoredPropertyLinesPreference(null);
+    }
+    return readStoredPropertyLinesPreference(
+      localStorage.getItem(PROPERTY_LINES_STORAGE_KEY)
+    );
+  });
+
+  useEffect(() => {
+    localStorage.setItem(PROPERTY_LINES_STORAGE_KEY, String(showPropertyLines));
+  }, [showPropertyLines]);
 
   const rainStorageKey = user ? rainAutoWaterStorageKey(user.id) : null;
   const getRainAutoWaterDate = useCallback(() => {
@@ -706,6 +721,18 @@ export default function GardenMap() {
         <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
           <button
             type="button"
+            onClick={() => setShowPropertyLines((value) => !value)}
+            className={`rounded-lg px-3 py-2 text-sm font-medium shadow-lg ring-1 ring-black/5 ${
+              showPropertyLines
+                ? 'bg-sky-100 text-sky-900 ring-sky-200 hover:bg-sky-200'
+                : 'bg-white text-emerald-800 hover:bg-emerald-50'
+            }`}
+            aria-pressed={showPropertyLines}
+          >
+            {showPropertyLines ? 'Hide property lines' : 'Show property lines'}
+          </button>
+          <button
+            type="button"
             onClick={() => setCompactMarkers((value) => !value)}
             className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-800 shadow-lg ring-1 ring-black/5 hover:bg-emerald-50"
             aria-pressed={compactMarkers}
@@ -745,7 +772,7 @@ export default function GardenMap() {
           {...viewState}
           onMove={(evt) => setViewState(evt.viewState)}
           mapboxAccessToken={mapboxToken}
-          mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
+          mapStyle={mapStyleForPropertyLines(showPropertyLines)}
           style={{ width: '100%', height: '100%' }}
           onClick={handleMapClick}
         >

@@ -31,7 +31,10 @@ import {
   listPlacements,
   listReminders,
   markPlacementsWatered,
+  mapStyleForPropertyLines,
+  PROPERTY_LINES_STORAGE_KEY,
   rainAutoWaterStorageKey,
+  readStoredPropertyLinesPreference,
   searchAddress,
   updatePlacement,
   type CareFilter,
@@ -47,7 +50,6 @@ import { getMapboxAccessToken, isMapboxConfigured } from '@/lib/mapbox';
 import { GardenWeather } from '@/components/GardenWeather';
 import { PlantVarietyPicker } from '@/components/PlantVarietyPicker';
 
-const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
 const DEFAULT_CENTER: [number, number] = [-122.4194, 37.7749];
 const MAP_ZOOM = 18;
 
@@ -95,6 +97,9 @@ export default function MapScreen() {
   const [wateringAll, setWateringAll] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [rainAutoWaterDate, setRainAutoWaterDateState] = useState<string | null>(null);
+  const [showPropertyLines, setShowPropertyLines] = useState(
+    readStoredPropertyLinesPreference(null)
+  );
 
   const getRainAutoWaterDate = useCallback(() => rainAutoWaterDate, [rainAutoWaterDate]);
   const setRainAutoWaterDate = useCallback(
@@ -113,6 +118,16 @@ export default function MapScreen() {
       setRainAutoWaterDateState(value);
     });
   }, [user]);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(PROPERTY_LINES_STORAGE_KEY).then((value) => {
+      setShowPropertyLines(readStoredPropertyLinesPreference(value));
+    });
+  }, []);
+
+  useEffect(() => {
+    void AsyncStorage.setItem(PROPERTY_LINES_STORAGE_KEY, String(showPropertyLines));
+  }, [showPropertyLines]);
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -513,7 +528,11 @@ export default function MapScreen() {
           </View>
         </KeyboardAvoidingView>
 
-        <MapView style={styles.map} styleURL={SATELLITE_STYLE} onPress={handleMapPress}>
+        <MapView
+          style={styles.map}
+          styleURL={mapStyleForPropertyLines(showPropertyLines)}
+          onPress={handleMapPress}
+        >
           <Camera
             zoomLevel={MAP_ZOOM}
             centerCoordinate={center}
@@ -574,6 +593,25 @@ export default function MapScreen() {
             compact
           />
         </View>
+
+        <Pressable
+          style={[
+            styles.propertyLinesToggle,
+            showPropertyLines && styles.propertyLinesToggleActive,
+          ]}
+          onPress={() => setShowPropertyLines((value) => !value)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: showPropertyLines }}
+        >
+          <Text
+            style={[
+              styles.propertyLinesToggleText,
+              showPropertyLines && styles.propertyLinesToggleTextActive,
+            ]}
+          >
+            {showPropertyLines ? 'Hide property lines' : 'Show property lines'}
+          </Text>
+        </Pressable>
 
         <Pressable
           style={styles.compactMarkersToggle}
@@ -920,9 +958,30 @@ const styles = StyleSheet.create({
     zIndex: 10,
     maxWidth: 220,
   },
-  compactMarkersToggle: {
+  propertyLinesToggle: {
     position: 'absolute',
     top: 88,
+    left: 12,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  propertyLinesToggleActive: {
+    backgroundColor: '#e0f2fe',
+    borderWidth: 1,
+    borderColor: '#7dd3fc',
+  },
+  propertyLinesToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
+  propertyLinesToggleTextActive: { color: '#0c4a6e' },
+  compactMarkersToggle: {
+    position: 'absolute',
+    top: 136,
     left: 12,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -937,7 +996,7 @@ const styles = StyleSheet.create({
   compactMarkersToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
   adjustModeToggle: {
     position: 'absolute',
-    top: 136,
+    top: 184,
     left: 12,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -958,7 +1017,7 @@ const styles = StyleSheet.create({
   adjustModeToggleTextActive: { color: '#92400e' },
   adjustModeBanner: {
     position: 'absolute',
-    top: 196,
+    top: 244,
     left: 12,
     right: 12,
     zIndex: 10,
