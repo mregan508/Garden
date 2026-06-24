@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Camera, MapView, PointAnnotation } from '@rnmapbox/maps';
+import { Camera, FillLayer, LineLayer, MapView, PointAnnotation, ShapeSource } from '@rnmapbox/maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -23,6 +23,7 @@ import {
   createPlacement,
   DEFAULT_PLANT_MAP_FILTERS,
   deletePlacement,
+  fetchPropertyBoundaryFromApi,
   filterPlacements,
   findCatalogVariety,
   gardenCenter,
@@ -35,6 +36,7 @@ import {
   PROPERTY_LINES_STORAGE_KEY,
   rainAutoWaterStorageKey,
   readStoredPropertyLinesPreference,
+  resolveGardenWebBaseUrl,
   searchAddress,
   updatePlacement,
   type CareFilter,
@@ -44,6 +46,7 @@ import {
   type PlantCatalogEntry,
   type PlantCatalogVariety,
   type PlantMapFilters,
+  type PropertyBoundaryResponse,
 } from '@gardening/shared';
 import '@/lib/mapbox';
 import { getMapboxAccessToken, isMapboxConfigured } from '@/lib/mapbox';
@@ -100,6 +103,20 @@ export default function MapScreen() {
   const [showPropertyLines, setShowPropertyLines] = useState(
     readStoredPropertyLinesPreference(null)
   );
+  const [propertyBoundary, setPropertyBoundary] = useState<
+    PropertyBoundaryResponse['feature']
+  >(null);
+  const [propertyBoundaryMessage, setPropertyBoundaryMessage] = useState<string | null>(
+    null
+  );
+
+  const gardenApiBase = useMemo(
+    () =>
+      resolveGardenWebBaseUrl({
+        expoGardenWebUrl: process.env.EXPO_PUBLIC_GARDEN_WEB_URL,
+      }),
+    []
+  );
 
   const getRainAutoWaterDate = useCallback(() => rainAutoWaterDate, [rainAutoWaterDate]);
   const setRainAutoWaterDate = useCallback(
@@ -128,6 +145,43 @@ export default function MapScreen() {
   useEffect(() => {
     void AsyncStorage.setItem(PROPERTY_LINES_STORAGE_KEY, String(showPropertyLines));
   }, [showPropertyLines]);
+
+  const boundaryLookupPoint = useMemo(() => {
+    const garden = gardenCenter(placements);
+    if (garden) return garden;
+    return { latitude: center[1], longitude: center[0] };
+  }, [placements, center]);
+
+  useEffect(() => {
+    if (!showPropertyLines) {
+      setPropertyBoundary(null);
+      setPropertyBoundaryMessage(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void fetchPropertyBoundaryFromApi(
+        gardenApiBase,
+        boundaryLookupPoint.latitude,
+        boundaryLookupPoint.longitude
+      ).then((result) => {
+        if (cancelled) return;
+        setPropertyBoundary(result.feature);
+        setPropertyBoundaryMessage(result.message);
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    showPropertyLines,
+    gardenApiBase,
+    boundaryLookupPoint.latitude,
+    boundaryLookupPoint.longitude,
+  ]);
 
   const filteredPlacements = useMemo(
     () => filterPlacements(placements, mapFilters, reminders),
@@ -538,6 +592,24 @@ export default function MapScreen() {
             centerCoordinate={center}
             animationDuration={cameraAnimation}
           />
+          {showPropertyLines && propertyBoundary ? (
+            <ShapeSource id="property-boundary" shape={propertyBoundary}>
+              <FillLayer
+                id="property-boundary-fill"
+                style={{
+                  fillColor: 'rgba(250, 204, 21, 0.12)',
+                }}
+              />
+              <LineLayer
+                id="property-boundary-line"
+                style={{
+                  lineColor: '#facc15',
+                  lineWidth: 3,
+                  lineOpacity: 0.95,
+                }}
+              />
+            </ShapeSource>
+          ) : null}
           {filteredPlacements.map((placement) => (
             <PointAnnotation
               key={placement.id}
@@ -612,6 +684,12 @@ export default function MapScreen() {
             {showPropertyLines ? 'Hide property lines' : 'Show property lines'}
           </Text>
         </Pressable>
+
+        {showPropertyLines && propertyBoundaryMessage ? (
+          <View style={styles.propertyLinesMessage} pointerEvents="none">
+            <Text style={styles.propertyLinesMessageText}>{propertyBoundaryMessage}</Text>
+          </View>
+        ) : null}
 
         <Pressable
           style={styles.compactMarkersToggle}
@@ -979,9 +1057,26 @@ const styles = StyleSheet.create({
   },
   propertyLinesToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
   propertyLinesToggleTextActive: { color: '#0c4a6e' },
-  compactMarkersToggle: {
+  propertyLinesMessage: {
     position: 'absolute',
     top: 136,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+    maxWidth: 280,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  propertyLinesMessageText: { color: '#0c4a6e', fontSize: 11, lineHeight: 15 },
+  compactMarkersToggle: {
+    position: 'absolute',
+    top: 184,
     left: 12,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -996,7 +1091,7 @@ const styles = StyleSheet.create({
   compactMarkersToggleText: { color: '#065f46', fontSize: 14, fontWeight: '600' },
   adjustModeToggle: {
     position: 'absolute',
-    top: 184,
+    top: 232,
     left: 12,
     zIndex: 10,
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -1017,7 +1112,7 @@ const styles = StyleSheet.create({
   adjustModeToggleTextActive: { color: '#92400e' },
   adjustModeBanner: {
     position: 'absolute',
-    top: 244,
+    top: 292,
     left: 12,
     right: 12,
     zIndex: 10,

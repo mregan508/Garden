@@ -1,15 +1,16 @@
-/** Pure satellite imagery — no street or lot overlay. */
+/** Pure satellite imagery — property boundaries are drawn as a GeoJSON overlay. */
 export const MAPBOX_SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-v9';
 
-/** Satellite with roads, labels, and building footprints (lot context at garden zoom). */
+/** @deprecated Use MAPBOX_SATELLITE_STYLE; lot lines are rendered as an overlay. */
 export const MAPBOX_SATELLITE_STREETS_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
 
 export const DEFAULT_SHOW_PROPERTY_LINES = true;
 
 export const PROPERTY_LINES_STORAGE_KEY = 'garden_show_property_lines';
 
-export function mapStyleForPropertyLines(showPropertyLines: boolean): string {
-  return showPropertyLines ? MAPBOX_SATELLITE_STREETS_STYLE : MAPBOX_SATELLITE_STYLE;
+/** Garden map always uses satellite; property lines are toggled via overlay layers. */
+export function mapStyleForPropertyLines(_showPropertyLines: boolean): string {
+  return MAPBOX_SATELLITE_STYLE;
 }
 
 export function readStoredPropertyLinesPreference(

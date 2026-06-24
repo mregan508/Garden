@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Map, { Marker, type MapMouseEvent } from 'react-map-gl/mapbox';
+import Map, { Layer, Marker, Source, type MapMouseEvent } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   buildVarietyDisplayName,
@@ -10,6 +10,7 @@ import {
   createPlacement,
   DEFAULT_PLANT_MAP_FILTERS,
   deletePlacement,
+  fetchPropertyBoundaryFromApi,
   filterPlacements,
   findCatalogVariety,
   gardenCenter,
@@ -22,6 +23,7 @@ import {
   PROPERTY_LINES_STORAGE_KEY,
   rainAutoWaterStorageKey,
   readStoredPropertyLinesPreference,
+  resolveGardenWebBaseUrl,
   updatePlacement,
   useAuth,
   type GardenPlacement,
@@ -29,7 +31,9 @@ import {
   type PlantCatalogEntry,
   type PlantCatalogVariety,
   type PlantMapFilters,
+  type PropertyBoundaryResponse,
 } from '@gardening/shared';
+import { basePath } from '@/lib/basePath';
 import { searchAddress, type GeocodeResult } from '@/lib/mapboxGeocode';
 import { PlantCatalogDetails, PlantCatalogPicker } from '@/components/PlantCatalogPicker';
 import { PlantVarietyPicker } from '@/components/PlantVarietyPicker';
@@ -87,6 +91,65 @@ export default function GardenMap() {
   useEffect(() => {
     localStorage.setItem(PROPERTY_LINES_STORAGE_KEY, String(showPropertyLines));
   }, [showPropertyLines]);
+
+  const [propertyBoundary, setPropertyBoundary] = useState<
+    PropertyBoundaryResponse['feature']
+  >(null);
+  const [propertyBoundaryMessage, setPropertyBoundaryMessage] = useState<string | null>(
+    null
+  );
+
+  const gardenApiBase = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return resolveGardenWebBaseUrl();
+    }
+    return resolveGardenWebBaseUrl({
+      windowOrigin: window.location.origin,
+      basePath,
+    });
+  }, []);
+
+  const boundaryLookupPoint = useMemo(() => {
+    return (
+      gardenCenter(placements) ?? {
+        latitude: viewState.latitude,
+        longitude: viewState.longitude,
+      }
+    );
+  }, [placements, viewState.latitude, viewState.longitude]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      if (!showPropertyLines) {
+        setPropertyBoundary(null);
+        setPropertyBoundaryMessage(null);
+        return;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      if (cancelled) return;
+
+      const result = await fetchPropertyBoundaryFromApi(
+        gardenApiBase,
+        boundaryLookupPoint.latitude,
+        boundaryLookupPoint.longitude
+      );
+      if (cancelled) return;
+      setPropertyBoundary(result.feature);
+      setPropertyBoundaryMessage(result.message);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showPropertyLines,
+    gardenApiBase,
+    boundaryLookupPoint.latitude,
+    boundaryLookupPoint.longitude,
+  ]);
 
   const rainStorageKey = user ? rainAutoWaterStorageKey(user.id) : null;
   const getRainAutoWaterDate = useCallback(() => {
@@ -731,6 +794,11 @@ export default function GardenMap() {
           >
             {showPropertyLines ? 'Hide property lines' : 'Show property lines'}
           </button>
+          {showPropertyLines && propertyBoundaryMessage ? (
+            <p className="max-w-xs rounded-lg bg-white/95 px-3 py-2 text-xs text-sky-900 shadow-lg ring-1 ring-black/5">
+              {propertyBoundaryMessage}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => setCompactMarkers((value) => !value)}
@@ -776,6 +844,27 @@ export default function GardenMap() {
           style={{ width: '100%', height: '100%' }}
           onClick={handleMapClick}
         >
+          {showPropertyLines && propertyBoundary ? (
+            <Source id="property-boundary" type="geojson" data={propertyBoundary}>
+              <Layer
+                id="property-boundary-fill"
+                type="fill"
+                paint={{
+                  'fill-color': '#facc15',
+                  'fill-opacity': 0.12,
+                }}
+              />
+              <Layer
+                id="property-boundary-line"
+                type="line"
+                paint={{
+                  'line-color': '#facc15',
+                  'line-width': 3,
+                  'line-opacity': 0.95,
+                }}
+              />
+            </Source>
+          ) : null}
           {filteredPlacements.map((placement) => (
             <Marker
               key={placement.id}
