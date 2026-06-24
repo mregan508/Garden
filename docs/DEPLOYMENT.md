@@ -32,13 +32,13 @@ In Vercel → Project → Settings → Environment Variables, add:
 
 Apply to **Production**, **Preview**, and **Development**.
 
-## 3. Custom domain
+## 3. Custom domain (via protocols project)
 
-1. Vercel → Project → Settings → Domains → Add `mregan.xyz`.
-2. At your domain registrar, point DNS to Vercel (A record `76.76.21.21` or CNAME to `cname.vercel-dns.com` — Vercel shows the exact values when you add the domain).
-3. Wait for DNS propagation and SSL provisioning.
+**Do not** add `mregan.xyz` to the `garden-web` Vercel project. The apex domain is owned by the **protocols** project; `/garden` traffic is rewritten to this app's production URL (`garden-zeta-nine.vercel.app`).
 
-The app is served under `/garden` on whatever host you attach (including `*.vercel.app` preview URLs).
+Configure DNS once on the protocols side — see [protocols/docs/deployment/DOMAIN.md](../../protocols/docs/deployment/DOMAIN.md).
+
+This project keeps its `*.vercel.app` production alias only. Users reach the app at `https://mregan.xyz/garden`.
 
 ## 4. Supabase auth URLs
 
@@ -67,4 +67,4 @@ After deploy, open https://mregan.xyz/garden and sign in.
 
 ## Optional: root domain page
 
-`mregan.xyz/` is not part of this Next.js app. To add a personal landing page at the root later, use a separate Vercel project or a static `public/index.html` on another host — this gardening app only occupies `/garden`.
+`mregan.xyz/` is served by the **protocols** web app (marketing, privacy, terms). This gardening app only occupies `/garden` via Vercel rewrites on the protocols project.
