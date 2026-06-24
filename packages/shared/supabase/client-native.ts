@@ -1,7 +1,15 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { memoryAuthStorage } from './auth-storage';
 
-export function createNativeSupabaseClient(): SupabaseClient {
+export interface NativeSupabaseClientOptions {
+  staySignedIn?: boolean;
+}
+
+export function createNativeSupabaseClient(
+  options: NativeSupabaseClientOptions = {}
+): SupabaseClient {
+  const staySignedIn = options.staySignedIn ?? true;
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
@@ -13,7 +21,7 @@ export function createNativeSupabaseClient(): SupabaseClient {
 
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
-      storage: AsyncStorage,
+      storage: staySignedIn ? AsyncStorage : memoryAuthStorage,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,

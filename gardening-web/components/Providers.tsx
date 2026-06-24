@@ -1,9 +1,13 @@
 'use client';
 
 import { AuthProvider } from '@gardening/shared';
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient, prepareWebAuthSession } from '@/lib/supabase';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const supabase = getSupabaseClient();
-  return <AuthProvider supabase={supabase}>{children}</AuthProvider>;
+  return (
+    <AuthProvider supabase={supabase} prepareAuthSession={prepareWebAuthSession}>
+      {children}
+    </AuthProvider>
+  );
 }

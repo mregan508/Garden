@@ -11,6 +11,11 @@ export interface User {
 
 export interface SignUpOptions {
   emailRedirectTo?: string;
+  staySignedIn?: boolean;
+}
+
+export interface SignInOptions {
+  staySignedIn?: boolean;
 }
 
 export interface SignUpResult {
@@ -23,7 +28,11 @@ export interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
-  signIn: (email: string, password: string) => Promise<{ error: { message: string } | null }>;
+  signIn: (
+    email: string,
+    password: string,
+    options?: SignInOptions
+  ) => Promise<{ error: { message: string } | null }>;
   signUp: (email: string, password: string, options?: SignUpOptions) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   clearError: () => void;
@@ -35,9 +44,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 interface AuthProviderProps {
   children: ReactNode;
   supabase: SupabaseClient;
+  prepareAuthSession?: (staySignedIn: boolean) => SupabaseClient;
 }
 
-export function AuthProvider({ children, supabase }: AuthProviderProps) {
+export function AuthProvider({
+  children,
+  supabase: initialSupabase,
+  prepareAuthSession,
+}: AuthProviderProps) {
+  const [supabase, setSupabase] = useState(initialSupabase);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +90,19 @@ export function AuthProvider({ children, supabase }: AuthProviderProps) {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  const signIn = async (email: string, password: string) => {
+  const resolveClient = (staySignedIn?: boolean) => {
+    if (staySignedIn === undefined || !prepareAuthSession) {
+      return supabase;
+    }
+    const nextClient = prepareAuthSession(staySignedIn);
+    setSupabase(nextClient);
+    return nextClient;
+  };
+
+  const signIn = async (email: string, password: string, options?: SignInOptions) => {
     setError(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const client = resolveClient(options?.staySignedIn);
+    const { error: signInError } = await client.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -91,7 +116,8 @@ export function AuthProvider({ children, supabase }: AuthProviderProps) {
 
   const signUp = async (email: string, password: string, options?: SignUpOptions) => {
     setError(null);
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    const client = resolveClient(options?.staySignedIn);
+    const { data, error: signUpError } = await client.auth.signUp({
       email: email.trim(),
       password,
       options: options?.emailRedirectTo

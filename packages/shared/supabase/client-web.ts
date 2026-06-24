@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserAuthStorage } from './auth-storage';
 
-export function createWebSupabaseClient(): SupabaseClient {
+export function createWebSupabaseClient(staySignedIn = true): SupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
@@ -9,6 +10,7 @@ export function createWebSupabaseClient(): SupabaseClient {
     supabaseAnonKey || 'placeholder',
     {
       auth: {
+        storage: createBrowserAuthStorage(staySignedIn),
         persistSession: typeof window !== 'undefined',
         autoRefreshToken: true,
         detectSessionInUrl: typeof window !== 'undefined',

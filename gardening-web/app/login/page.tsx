@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@gardening/shared';
+import { readStaySignedInPreference, STAY_SIGNED_IN_PREF_KEY, useAuth } from '@gardening/shared';
 import { authRedirectUrl } from '@/lib/basePath';
 
 export default function LoginPage() {
@@ -11,6 +11,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [staySignedIn, setStaySignedIn] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+    return readStaySignedInPreference(localStorage.getItem(STAY_SIGNED_IN_PREF_KEY));
+  });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -37,6 +43,7 @@ export default function LoginPage() {
     if (isSignUp) {
       const { error: signUpError, needsEmailConfirmation } = await signUp(email, password, {
         emailRedirectTo: authRedirectUrl('/auth/confirm'),
+        staySignedIn,
       });
       if (!signUpError) {
         if (needsEmailConfirmation) {
@@ -47,7 +54,7 @@ export default function LoginPage() {
         }
       }
     } else {
-      const { error: signInError } = await signIn(email, password);
+      const { error: signInError } = await signIn(email, password, { staySignedIn });
       if (!signInError) {
         router.replace('/');
       }
@@ -92,6 +99,18 @@ export default function LoginPage() {
               className="w-full rounded-lg border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
             />
           </div>
+
+          {!isSignUp ? (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={staySignedIn}
+                onChange={(e) => setStaySignedIn(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-400 text-emerald-600 focus:ring-emerald-600"
+              />
+              Stay signed in
+            </label>
+          ) : null}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {message && <p className="text-sm text-emerald-700">{message}</p>}

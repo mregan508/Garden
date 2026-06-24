@@ -6,12 +6,14 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@gardening/shared';
+import { loadNativeStaySignedInPreference } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const { user, loading, signIn, signUp, error, clearError } = useAuth();
@@ -19,8 +21,12 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [staySignedIn, setStaySignedIn] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    void loadNativeStaySignedInPreference().then(setStaySignedIn);
+  }, []);
   useEffect(() => {
     if (user) {
       router.replace('/(tabs)/map');
@@ -45,7 +51,9 @@ export default function LoginScreen() {
     clearError();
 
     if (isSignUp) {
-      const { error: signUpError, needsEmailConfirmation } = await signUp(email, password);
+      const { error: signUpError, needsEmailConfirmation } = await signUp(email, password, {
+        staySignedIn,
+      });
       setSubmitting(false);
       if (!signUpError) {
         if (needsEmailConfirmation) {
@@ -56,7 +64,7 @@ export default function LoginScreen() {
         }
       }
     } else {
-      const { error: signInError } = await signIn(email, password);
+      const { error: signInError } = await signIn(email, password, { staySignedIn });
       setSubmitting(false);
       if (!signInError) {
         router.replace('/(tabs)/map');
@@ -89,8 +97,19 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!isSignUp ? (
+          <View style={styles.staySignedInRow}>
+            <Switch
+              value={staySignedIn}
+              onValueChange={setStaySignedIn}
+              trackColor={{ false: '#d1d5db', true: '#6ee7b7' }}
+              thumbColor={staySignedIn ? '#059669' : '#f9fafb'}
+            />
+            <Text style={styles.staySignedInLabel}>Stay signed in</Text>
+          </View>
+        ) : null}
 
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <Pressable
           style={[styles.button, submitting && styles.buttonDisabled]}
           onPress={() => void handleSubmit()}
@@ -157,6 +176,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
     fontSize: 16,
+  },
+  staySignedInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  staySignedInLabel: {
+    fontSize: 14,
+    color: '#374151',
   },
   button: {
     backgroundColor: '#059669',
