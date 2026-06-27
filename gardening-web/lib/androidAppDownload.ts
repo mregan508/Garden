@@ -2,8 +2,9 @@ import { basePath } from './basePath';
 
 export const ANDROID_APP_FILENAME = 'garden-map.apk';
 
-const GITHUB_LATEST_APK_URL =
-  'https://github.com/mregan508/Garden/releases/latest/download/garden-map.apk';
+/** Pin to a tagged release — GitHub's /releases/latest/ skips pre-releases. */
+const GITHUB_APK_URL =
+  'https://github.com/mregan508/Garden/releases/download/v1.0.0/garden-map.apk';
 
 /** URL for the sideload Android APK (env override, then GitHub release, then local static file). */
 export function getAndroidAppDownloadUrl(): string {
@@ -16,5 +17,5 @@ export function getAndroidAppDownloadUrl(): string {
     return `${basePath}/downloads/${ANDROID_APP_FILENAME}`;
   }
 
-  return GITHUB_LATEST_APK_URL;
+  return GITHUB_APK_URL;
 }
