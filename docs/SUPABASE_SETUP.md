@@ -1,5 +1,7 @@
 # Supabase setup
 
+Hosted project ref: **`chisciyfxhfndxyteesx`** (us-east-1)
+
 ## 1. Create a project
 
 1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and create a new project (separate from Protocols).
@@ -8,19 +10,19 @@
 ## 2. Configure environment variables
 
 ```bash
-# gardening-web/.env.local
 cp gardening-web/.env.example gardening-web/.env.local
-
-# gardening-app/.env
 cp gardening-app/.env.example gardening-app/.env
 ```
 
-Fill in `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` with your project values.
+Fill in Supabase and Mapbox values in both files:
 
-For maps:
+| Variable | Apps |
+|----------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` | Web / mobile |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Web / mobile |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` / `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Web / mobile |
 
-- **Web:** `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` from [mapbox.com](https://account.mapbox.com/)
-- **Mobile:** `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` (same public `pk.` token as web)
+Optional web-only: `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` — override APK download link on login page.
 
 ## 3. Link CLI and apply migrations
 
@@ -29,44 +31,43 @@ From the repo root:
 ```bash
 npm install supabase --save-dev   # or use npx supabase
 npx supabase login
-npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase link --project-ref chisciyfxhfndxyteesx
 npx supabase db push
 ```
 
-This applies every SQL file in `supabase/migrations/` in timestamp order (placements, catalog, journal, indoor flag, and later additions).
+This applies every SQL file in `supabase/migrations/` including placements, catalog, varieties, journal, reminders, indoor flag, and security fixes.
 
 ## 4. Verify RLS
 
-In the Supabase SQL editor, confirm:
+In the SQL editor, confirm RLS is enabled on user tables with policies scoped to `auth.uid() = user_id`:
 
-- `garden_placements` exists with RLS enabled
-- Four policies for SELECT / INSERT / UPDATE / DELETE scoped to `auth.uid() = user_id`
+- `garden_placements`
+- `garden_journal_entries`
+- `garden_reminders`
+
+`plant_catalog` and `plant_catalog_variety` are readable by authenticated users.
 
 ## 5. Auth settings
 
-> **"Email rate limit exceeded" on sign-up?** This is not a password issue. Hosted Supabase sends a confirmation email on every sign-up attempt and limits built-in email to about **3 per hour** on free plans. Repeated testing hits that cap quickly.
->
-> **Fix for development:** Authentication → [Sign In / Providers → Email](https://supabase.com/dashboard/project/_/auth/providers) → turn off **Confirm email**. Sign-up will work immediately with no email sent.
+> **"Email rate limit exceeded" on sign-up?** Hosted Supabase limits built-in email to ~3/hour on free plans. For development, disable **Confirm email** under Authentication → Providers → Email.
 
-In Authentication → Providers, ensure **Email** is enabled.
+Ensure **Email** provider is enabled.
 
-In **Authentication → URL Configuration**:
+**Authentication → URL Configuration:**
 
-| Setting | Value (local dev) |
-|---------|-------------------|
-| Site URL | `http://localhost:3000/garden` |
-| Redirect URLs | `http://localhost:3000/garden/auth/confirm` |
+| Setting | Local dev | Production |
+|---------|-----------|------------|
+| Site URL | `http://localhost:3000/garden` | `https://mregan.xyz/garden` |
+| Redirect URLs | `http://localhost:3000/garden/auth/confirm` | `https://mregan.xyz/garden/auth/confirm` |
 
-For production at **mregan.xyz/garden**, see [DEPLOYMENT.md](DEPLOYMENT.md).
+The web app sends confirmation links to `/auth/confirm`. That path must be in redirect URLs.
 
-The web app sends new users a confirmation email that links to `/auth/confirm`. That route must be allowed as a redirect URL or confirmation will fail.
+**Email confirmation options:**
 
-**Email confirmation (choose one):**
+- **Testing:** disable Confirm email — instant sign-in after sign-up
+- **Production:** leave enabled — users confirm via email link
 
-- **Recommended for testing:** Authentication → Sign In / Providers → Email → disable **Confirm email**. New accounts sign in immediately after sign-up.
-- **Production-style:** leave confirmation enabled. Users click the link in their email, land on `/auth/confirm`, and are redirected to the garden map.
-
-For local Supabase (`supabase start`), email confirmation is disabled in `supabase/config.toml` and test mail goes to Inbucket on port 54324.
+Local Supabase (`supabase start`): confirmation disabled in `supabase/config.toml`; mail captured in Inbucket (port 54324).
 
 ## Local development (optional)
 
@@ -75,4 +76,4 @@ npx supabase start
 npx supabase db reset
 ```
 
-Use the local URL and anon key printed by `supabase start` in your `.env` files.
+Use the local URL and anon key from `supabase start` in your `.env` files.

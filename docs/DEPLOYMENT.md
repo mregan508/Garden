@@ -1,70 +1,112 @@
-# Deploying the web app to mregan.xyz/garden
+# Deploying Garden Map
 
-The Next.js app uses `basePath: '/garden'`, so production URLs look like:
+## Web app (mregan.xyz/garden)
 
-| Page | URL |
-|------|-----|
-| Garden map | https://mregan.xyz/garden |
-| Sign in | https://mregan.xyz/garden/login |
-| Auth confirm | https://mregan.xyz/garden/auth/confirm |
-| Plant journal | https://mregan.xyz/garden/{placement-id}/journal |
+The Next.js app uses `basePath: '/garden'`.
 
-Local dev uses the same paths: http://localhost:3000/garden
+### URLs
 
-## 1. Vercel project
+| Page | Production | Local dev |
+|------|------------|-----------|
+| Garden map | https://mregan.xyz/garden | http://localhost:3000/garden |
+| Sign in | https://mregan.xyz/garden/login | http://localhost:3000/garden/login |
+| Auth confirm | https://mregan.xyz/garden/auth/confirm | http://localhost:3000/garden/auth/confirm |
+| Activity feed | https://mregan.xyz/garden/activity | http://localhost:3000/garden/activity |
+| Reminders | https://mregan.xyz/garden/reminders | http://localhost:3000/garden/reminders |
+| Plant journal | https://mregan.xyz/garden/{placement-id}/journal | http://localhost:3000/garden/{id}/journal |
 
-1. Push this repo to GitHub (if not already).
-2. In [Vercel](https://vercel.com/new), import the repository.
-3. Set **Root Directory** to `gardening-web`.
-4. Framework preset: **Next.js** (detected automatically).
+### 1. Vercel project
 
-The included `gardening-web/vercel.json` installs `@gardening/shared` from the monorepo before building.
+1. Import **https://github.com/mregan508/Garden** in [Vercel](https://vercel.com/new).
+2. Root directory: repo root (uses root `vercel.json`) **or** `gardening-web` with matching settings.
+3. Framework: **Next.js**.
 
-## 2. Environment variables
+Root `vercel.json` installs `@gardening/shared` before building `gardening-web`.
 
-In Vercel → Project → Settings → Environment Variables, add:
+### 2. Environment variables
 
-| Variable | Value |
-|----------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon public key |
-| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox public `pk.` token |
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Anon public key |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Yes | Mapbox public `pk.` token |
+| `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` | No | Override APK URL for login download button; defaults to GitHub Release v1.0.0 |
 
-Apply to **Production**, **Preview**, and **Development**.
+Apply to Production, Preview, and Development.
 
-## 3. Custom domain (via protocols project)
+### 3. Custom domain (via protocols project)
 
-**Do not** add `mregan.xyz` to the `garden-web` Vercel project. The apex domain is owned by the **protocols** project; `/garden` traffic is rewritten to this app's production URL (`garden-zeta-nine.vercel.app`).
+**Do not** add `mregan.xyz` to the garden Vercel project. The apex domain is owned by the **protocols** project; `/garden` traffic is rewritten to this app's Vercel URL (`garden-zeta-nine.vercel.app`).
 
-Configure DNS once on the protocols side — see [protocols/docs/deployment/DOMAIN.md](../../protocols/docs/deployment/DOMAIN.md).
+See protocols `docs/deployment/DOMAIN.md` for DNS/rewrite setup.
 
-This project keeps its `*.vercel.app` production alias only. Users reach the app at `https://mregan.xyz/garden`.
+### 4. Supabase auth URLs
 
-## 4. Supabase auth URLs
+Authentication → URL Configuration:
 
-In Supabase → Authentication → URL Configuration:
-
-| Setting | Production value |
-|---------|------------------|
+| Setting | Production |
+|---------|------------|
 | Site URL | `https://mregan.xyz/garden` |
 | Redirect URLs | `https://mregan.xyz/garden/auth/confirm` |
 
-For local development, also allow:
+Local dev — also allow:
 
 - `http://localhost:3000/garden`
 - `http://localhost:3000/garden/auth/confirm`
 
-## 5. Deploy
+### 5. Deploy web
 
-Connect Git for automatic deploys on push, or deploy manually from `gardening-web`:
+Push to `main` for automatic Vercel deploy, or:
 
 ```bash
 cd gardening-web
 npx vercel --prod
 ```
 
-After deploy, open https://mregan.xyz/garden and sign in.
+---
 
-## Optional: root domain page
+## Android app
 
-`mregan.xyz/` is served by the **protocols** web app (marketing, privacy, terms). This gardening app only occupies `/garden` via Vercel rewrites on the protocols project.
+### Distribution model
+
+- **Not** on Google Play — sideload via GitHub Releases
+- CI builds a **debug APK** suitable for personal/testing use
+- Web login page links to the release asset **`garden-map.apk`**
+
+### Build APK (GitHub Actions)
+
+1. Add repository secrets (Settings → Secrets → Actions):
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   - `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN`
+
+2. **Actions → Build Android APK → Run workflow** (branch `main`).
+
+3. Download artifact **garden-map-apk** when complete (~20–30 min first run).
+
+### Publish a release
+
+Use [scripts/publish-android-release.ps1](../scripts/publish-android-release.ps1) or create manually:
+
+1. Tag semver matching `gardening-app/app.json` version (e.g. `v1.0.0`).
+2. Attach asset named exactly **`garden-map.apk`**.
+3. Include SHA-256 checksum in release notes.
+4. Mark as **pre-release** for debug CI builds.
+
+**Current release:** https://github.com/mregan508/Garden/releases/tag/v1.0.0
+
+> GitHub's `/releases/latest/` redirect **skips pre-releases**. The web app defaults to the pinned tag URL (`v1.0.0`). When publishing a non-prerelease "latest", update `gardening-web/lib/androidAppDownload.ts` or set `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` in Vercel.
+
+### Install on device
+
+1. Download APK from release or web login button.
+2. Enable install from unknown sources when prompted.
+3. Open APK and install.
+4. Sign in with the same Supabase account as the web app.
+
+---
+
+## Optional notes
+
+- `mregan.xyz/` is served by the **protocols** app; gardening only occupies `/garden`.
+- Weather uses Open-Meteo — no deploy-time API key needed.

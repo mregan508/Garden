@@ -1,21 +1,31 @@
-# Phase 2: Plant Catalog
+# Plant catalog & data model
 
-Phase 1 stored only a free-text `name` on each map pin. Phase 2 adds a reference
-plant database and an optional link from placements to catalog entries.
+Phase 1 stored only a free-text `name` on each map pin. Later work added a reference plant database, journal, reminders, and map care features. This doc focuses on catalog/schema; see [README.md](../README.md) for the full feature list.
 
-## Database
+## Database tables
 
-Migrations:
+| Table | Purpose |
+|-------|---------|
+| `garden_placements` | User plant pins (lat/lng, name, optional catalog links, `is_indoor`) |
+| `plant_catalog` | ~100+ reference species (light, water, companions, NE climate notes) |
+| `plant_catalog_variety` | Cultivars/subspecies per catalog species |
+| `garden_journal_entries` | Per-pin care log |
+| `garden_reminders` | Recurring care schedules per pin |
 
-- `supabase/migrations/20250623200000_phase2_plant_catalog.sql` — schema + initial seed
-- `supabase/migrations/20250623250000_expand_catalog_northeast_50.sql` — expand to 50 plants
-- `supabase/migrations/20250623260000_expand_catalog_northeast_100.sql` — expand to 100 plants (Northeast US focus)
-- `supabase/migrations/20250623270000_plant_catalog_varieties.sql` — cultivars/subspecies per species + optional link on pins
-- `supabase/migrations/20250623280000_varieties_all_catalog.sql` — cultivar menus for all 101 catalog species
+All user-owned tables use RLS scoped to `auth.uid()`.
 
-- `plant_catalog` — global read for authenticated users (RLS)
-- `plant_catalog_variety` — cultivars for every catalog species (3–4+ options each; e.g. Honeycrisp for Apple Tree, Peppermint for Mint)
-- `garden_placements.plant_catalog_id` — optional FK; custom names remain when null
+## Migrations (catalog-related)
+
+- `20250623120000_create_garden_placements.sql`
+- `20250623200000_phase2_plant_catalog.sql` — schema + initial seed
+- `20250623250000_expand_catalog_northeast_50.sql`
+- `20250623260000_expand_catalog_northeast_100.sql`
+- `20250623270000_plant_catalog_varieties.sql`
+- `20250623280000_varieties_all_catalog.sql`
+- `20250623290000_add_user_requested_plants.sql`
+- `20250623300000` – `20250623380000` — additional species, varieties, indoor flag
+
+Other migrations: `20250623210000_create_garden_journal.sql`, `20250623240000_create_garden_reminders.sql`, `20260623191500_fix_garden_placements_security_performance.sql`
 
 Apply on hosted projects:
 
@@ -23,45 +33,44 @@ Apply on hosted projects:
 npx supabase db push
 ```
 
-Or apply via Supabase dashboard SQL editor.
-
 ## App behavior
 
 When adding or editing a plant:
 
 1. Search the catalog (optional)
 2. Select an entry to auto-fill the display name and link `plant_catalog_id`
-3. If the species has cultivars, pick a variety (e.g. Honeycrisp for Apple Tree, Peppermint for Mint)
+3. If the species has cultivars, pick a variety (e.g. Honeycrisp for Apple Tree)
 4. Or type a custom display name without selecting from the catalog
+5. Toggle **indoor** for houseplants (exempt from rain auto-water)
 
 Catalog-linked pins show care details (light, water, companions) in the sidebar/modal.
 
 ## Adding more plants
 
-Starter data is seeded in migrations. To regenerate variety seed from `scripts/catalog-varieties.tsv`:
+Starter data is seeded in migrations. To regenerate variety seed from TSV:
 
 ```bash
 node scripts/generate-variety-migration.mjs
+node scripts/generate-variety-supplement-migration.mjs   # after editing catalog-varieties-supplement.tsv
 ```
-
-To add more popular cultivars, edit `scripts/catalog-varieties-supplement.tsv` and run:
-
-```bash
-node scripts/generate-variety-supplement-migration.mjs
-```
-
-Then apply the generated migration (or `npx supabase db push`).
 
 To import additional plants from JSON:
 
 ```bash
-# packages/shared/data/plants/plants.json
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key \
 node scripts/import-plants.mjs
 ```
 
-## TypeScript
+Source JSON: `packages/shared/data/plants/plants.json`
 
-- `packages/shared/garden/catalog.ts` — `listPlantCatalog`, `getPlantCatalogEntry`
-- `packages/shared/types/garden.ts` — `PlantCatalogEntry`, `plant_catalog_id` on placements
+## TypeScript (shared package)
+
+- `packages/shared/garden/catalog.ts` — list/search catalog
+- `packages/shared/garden/varieties.ts` — variety display names
+- `packages/shared/garden/placements.ts` — pin CRUD
+- `packages/shared/garden/journal.ts` — journal entries
+- `packages/shared/garden/reminders.ts` — care reminders
+- `packages/shared/garden/watering.ts` — mark watered, rain auto-water
+- `packages/shared/garden/filters.ts` — map search/filter
+- `packages/shared/types/garden.ts` — shared types
