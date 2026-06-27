@@ -50,25 +50,27 @@ export default function LoginScreen() {
     setSubmitting(true);
     clearError();
 
-    if (isSignUp) {
-      const { error: signUpError, needsEmailConfirmation } = await signUp(email, password, {
-        staySignedIn,
-      });
-      setSubmitting(false);
-      if (!signUpError) {
-        if (needsEmailConfirmation) {
-          Alert.alert('Account created', 'Check your email to confirm, then sign in.');
-          setIsSignUp(false);
-        } else {
+    try {
+      if (isSignUp) {
+        const { error: signUpError, needsEmailConfirmation } = await signUp(email, password, {
+          staySignedIn,
+        });
+        if (!signUpError) {
+          if (needsEmailConfirmation) {
+            Alert.alert('Account created', 'Check your email to confirm, then sign in.');
+            setIsSignUp(false);
+          } else {
+            router.replace('/(tabs)/map');
+          }
+        }
+      } else {
+        const { error: signInError } = await signIn(email, password, { staySignedIn });
+        if (!signInError) {
           router.replace('/(tabs)/map');
         }
       }
-    } else {
-      const { error: signInError } = await signIn(email, password, { staySignedIn });
+    } finally {
       setSubmitting(false);
-      if (!signInError) {
-        router.replace('/(tabs)/map');
-      }
     }
   };
 

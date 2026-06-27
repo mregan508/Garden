@@ -62,15 +62,21 @@ export function AuthProvider({
       try {
         const {
           data: { session },
+          error: sessionError,
         } = await supabase.auth.getSession();
-        setUser(
-          session?.user
-            ? { id: session.user.id, email: session.user.email ?? '' }
-            : null
-        );
+        if (sessionError) {
+          console.warn('Session restore failed:', sessionError.message);
+          setUser(null);
+        } else {
+          setUser(
+            session?.user
+              ? { id: session.user.id, email: session.user.email ?? '' }
+              : null
+          );
+        }
       } catch (err) {
-        console.error('Error getting session:', err);
-        setError('Failed to get session');
+        console.warn('Error getting session:', err);
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -102,16 +108,24 @@ export function AuthProvider({
   const signIn = async (email: string, password: string, options?: SignInOptions) => {
     setError(null);
     const client = resolveClient(options?.staySignedIn);
-    const { error: signInError } = await client.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (signInError) {
-      const message = formatAuthError(signInError.message);
+    try {
+      const { error: signInError } = await client.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (signInError) {
+        const message = formatAuthError(signInError.message);
+        setError(message);
+        return { error: { message } };
+      }
+      return { error: null };
+    } catch (err) {
+      const message = formatAuthError(
+        err instanceof Error ? err.message : 'Network request failed. Check your connection.'
+      );
       setError(message);
       return { error: { message } };
     }
-    return { error: null };
   };
 
   const signUp = async (email: string, password: string, options?: SignUpOptions) => {

@@ -14,5 +14,9 @@ export function formatAuthError(message: string): string {
     );
   }
 
+  if (/network request failed|failed to fetch|network error/i.test(message)) {
+    return 'Could not reach the server. Check your internet connection and try again.';
+  }
+
   return message;
 }
