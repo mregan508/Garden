@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { readStaySignedInPreference, STAY_SIGNED_IN_PREF_KEY, useAuth } from '@gardening/shared';
 import { authRedirectUrl } from '@/lib/basePath';
+import {
+  ANDROID_APP_FILENAME,
+  getAndroidAppDownloadUrl,
+} from '@/lib/androidAppDownload';
 
 export default function LoginPage() {
   const { signIn, signUp, error, clearError, user, loading } = useAuth();
@@ -62,6 +66,8 @@ export default function LoginPage() {
 
     setSubmitting(false);
   };
+
+  const androidDownloadUrl = getAndroidAppDownloadUrl();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 to-green-100 px-4">
@@ -135,6 +141,14 @@ export default function LoginPage() {
         >
           {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
         </button>
+
+        <a
+          href={androidDownloadUrl}
+          download={ANDROID_APP_FILENAME}
+          className="mt-6 flex w-full items-center justify-center rounded-lg border border-emerald-600 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+        >
+          Download Android app
+        </a>
       </div>
     </div>
   );
