@@ -30,7 +30,7 @@ Root `vercel.json` installs `@gardening/shared` before building `gardening-web`.
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Anon public key |
 | `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Yes | Mapbox public `pk.` token |
-| `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` | No | Override APK URL for login download button; defaults to GitHub Release v1.0.0 |
+| `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` | No | Override APK URL for login download button; defaults to GitHub Release v1.0.1 |
 
 Apply to Production, Preview, and Development.
 
@@ -70,7 +70,7 @@ npx vercel --prod
 ### Distribution model
 
 - **Not** on Google Play — sideload via GitHub Releases
-- CI builds a **debug APK** suitable for personal/testing use
+- CI builds a **standalone release APK** with the JS bundle embedded (no Metro required)
 - Web login page links to the release asset **`garden-map.apk`**
 
 ### Build APK (GitHub Actions)
@@ -88,14 +88,24 @@ npx vercel --prod
 
 Use [scripts/publish-android-release.ps1](../scripts/publish-android-release.ps1) or create manually:
 
-1. Tag semver matching `gardening-app/app.json` version (e.g. `v1.0.0`).
+1. Tag semver matching `gardening-app/app.json` version (e.g. `v1.0.1`).
 2. Attach asset named exactly **`garden-map.apk`**.
 3. Include SHA-256 checksum in release notes.
-4. Mark as **pre-release** for debug CI builds.
+4. Mark as **pre-release** for sideload builds (optional).
 
-**Current release:** https://github.com/mregan508/Garden/releases/tag/v1.0.0
+**Current release:** https://github.com/mregan508/Garden/releases/tag/v1.0.1 (after rebuilding with fixed workflow)
 
-> GitHub's `/releases/latest/` redirect **skips pre-releases**. The web app defaults to the pinned tag URL (`v1.0.0`). When publishing a non-prerelease "latest", update `gardening-web/lib/androidAppDownload.ts` or set `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` in Vercel.
+> GitHub's `/releases/latest/` redirect **skips pre-releases**. The web app defaults to the pinned tag URL. Update `gardening-web/lib/androidAppDownload.ts` or set `NEXT_PUBLIC_ANDROID_APP_DOWNLOAD_URL` in Vercel when publishing a new version.
+
+### Local development (Metro required)
+
+If you run from source with `npx expo run:android`, start Metro first:
+
+```bash
+cd gardening-app && npm start
+```
+
+On a USB-connected device: `adb reverse tcp:8081 tcp:8081`
 
 ### Install on device
 

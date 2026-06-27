@@ -4,7 +4,7 @@ Interactive garden map app — place plants on a satellite map, track care in a 
 
 **Production web:** https://mregan.xyz/garden  
 **GitHub:** https://github.com/mregan508/Garden  
-**Android (sideload):** [GitHub Release v1.0.0](https://github.com/mregan508/Garden/releases/tag/v1.0.0) or the **Download Android app** button on the login page
+**Android (sideload):** [GitHub Release v1.0.1](https://github.com/mregan508/Garden/releases/tag/v1.0.1) or the **Download Android app** button on the login page
 
 ## Structure
 
@@ -97,7 +97,7 @@ GitHub Actions runs the same on every push/PR to `main`. Await `.github/workflow
 
 ### Android distribution
 
-- CI workflow builds debug APK (`Actions → Build Android APK`)
+- CI workflow builds standalone release APK (`Actions → Build Android APK`)
 - Releases published on GitHub with `garden-map.apk` asset
 - Publish script: `scripts/publish-android-release.ps1`
 
