@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.1",
-    "gardening": "file:../..",
     "zod": "^3.24.2"
   },
   "devDependencies": {

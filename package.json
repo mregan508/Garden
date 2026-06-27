@@ -2,7 +2,7 @@
   "name": "gardening",
   "private": true,
   "scripts": {
-    "install:all": "npm install --prefix packages/shared && npm install --prefix gardening-web && npm install --prefix gardening-app",
+    "install:all": "npm install --prefix packages/shared && npm install --prefix gardening-web && npm install --prefix gardening-app && node scripts/prune-shared-react.mjs",
     "typecheck": "npm run type-check --prefix packages/shared && npm run type-check --prefix gardening-web && npm run type-check --prefix gardening-app",
     "lint": "npm run lint --prefix gardening-web",
     "verify": "npm run typecheck && npm run lint"
