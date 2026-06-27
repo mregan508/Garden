@@ -12,8 +12,7 @@ config.resolver.nodeModulesPaths = [
   appModules,
   path.resolve(workspaceRoot, 'node_modules'),
 ];
-// Force a single React instance for the app and @gardening/shared (avoids "useState of null").
-config.resolver.disableHierarchicalLookup = true;
+// Dedupe React for @gardening/shared without breaking nested dependency lookup (e.g. semver).
 config.resolver.extraNodeModules = {
   react: path.join(appModules, 'react'),
   'react-dom': path.join(appModules, 'react-dom'),
