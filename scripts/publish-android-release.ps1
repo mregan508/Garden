@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = "mregan508/Garden"
 $version = $Tag.TrimStart("v")
-$releasesDir = Join-Path $PSScriptRoot ".." "releases"
+$releasesDir = Join-Path (Join-Path $PSScriptRoot "..") "releases"
 $apkPath = Join-Path $releasesDir "garden-map.apk"
 
 function Get-GitHubToken {
