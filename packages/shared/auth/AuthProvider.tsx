@@ -44,7 +44,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 interface AuthProviderProps {
   children: ReactNode;
   supabase: SupabaseClient;
-  prepareAuthSession?: (staySignedIn: boolean) => SupabaseClient;
+  prepareAuthSession?: (staySignedIn: boolean) => SupabaseClient | Promise<SupabaseClient>;
 }
 
 export function AuthProvider({
@@ -56,6 +56,10 @@ export function AuthProvider({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSupabase(initialSupabase);
+  }, [initialSupabase]);
 
   useEffect(() => {
     const getSession = async () => {
@@ -96,18 +100,18 @@ export function AuthProvider({
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  const resolveClient = (staySignedIn?: boolean) => {
+  const resolveClient = async (staySignedIn?: boolean) => {
     if (staySignedIn === undefined || !prepareAuthSession) {
       return supabase;
     }
-    const nextClient = prepareAuthSession(staySignedIn);
+    const nextClient = await prepareAuthSession(staySignedIn);
     setSupabase(nextClient);
     return nextClient;
   };
 
   const signIn = async (email: string, password: string, options?: SignInOptions) => {
     setError(null);
-    const client = resolveClient(options?.staySignedIn);
+    const client = await resolveClient(options?.staySignedIn);
     try {
       const { error: signInError } = await client.auth.signInWithPassword({
         email: email.trim(),
@@ -118,6 +122,7 @@ export function AuthProvider({
         setError(message);
         return { error: { message } };
       }
+      await client.auth.getSession();
       return { error: null };
     } catch (err) {
       const message = formatAuthError(
@@ -130,7 +135,7 @@ export function AuthProvider({
 
   const signUp = async (email: string, password: string, options?: SignUpOptions) => {
     setError(null);
-    const client = resolveClient(options?.staySignedIn);
+    const client = await resolveClient(options?.staySignedIn);
     const { data, error: signUpError } = await client.auth.signUp({
       email: email.trim(),
       password,

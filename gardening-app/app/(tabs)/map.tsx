@@ -174,17 +174,29 @@ export default function MapScreen() {
     setLoading(false);
   }, [supabase, user, flyTo]);
 
-  useEffect(() => {
-    void loadPlacements();
-    void (async () => {
-      const [catalogResult, varietiesResult] = await Promise.all([
-        listPlantCatalog(supabase),
-        listPlantCatalogVarieties(supabase),
-      ]);
+  const loadCatalog = useCallback(async () => {
+    if (!user) return;
+    const [catalogResult, varietiesResult] = await Promise.all([
+      listPlantCatalog(supabase),
+      listPlantCatalogVarieties(supabase),
+    ]);
+    if (catalogResult.error) {
+      setError(catalogResult.error);
+    } else {
       setCatalog(catalogResult.data);
+    }
+    if (varietiesResult.error) {
+      setError(varietiesResult.error);
+    } else {
       setCatalogVarieties(varietiesResult.data);
-    })();
-  }, [loadPlacements, supabase]);
+    }
+  }, [supabase, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadPlacements();
+    void loadCatalog();
+  }, [user, loadPlacements, loadCatalog]);
 
   useEffect(() => {
     void (async () => {
@@ -790,6 +802,10 @@ export default function MapScreen() {
                     </Pressable>
                   ))}
                 </View>
+              ) : catalogSearch.trim() ? (
+                <Text style={styles.catalogEmptyHint}>No catalog matches. Try another search.</Text>
+              ) : catalog.length === 0 ? (
+                <Text style={styles.catalogEmptyHint}>Catalog unavailable. Check your connection.</Text>
               ) : null}
               {selectedCatalogEntry ? (
                 <View style={styles.catalogDetails}>
@@ -1183,6 +1199,7 @@ const styles = StyleSheet.create({
   catalogItemSelected: { backgroundColor: '#ecfdf5' },
   catalogItemName: { fontSize: 14, color: '#111827', fontWeight: '500' },
   catalogItemScientific: { fontSize: 12, color: '#6b7280', fontStyle: 'italic' },
+  catalogEmptyHint: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
   catalogDetails: {
     backgroundColor: '#ecfdf5',
     borderRadius: 8,

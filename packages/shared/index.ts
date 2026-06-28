@@ -1,4 +1,5 @@
 export * from './auth/AuthProvider';
+export * from './auth/requireAuthUserId';
 export * from './auth/stay-signed-in';
 export * from './supabase/client-web';
 export * from './types/garden';

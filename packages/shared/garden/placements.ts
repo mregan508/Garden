@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthUserId } from '../auth/requireAuthUserId';
 import {
   createPlacementSchema,
   updatePlacementSchema,
@@ -55,10 +56,19 @@ export async function createPlacement(
     return { data: null, error: parsed.error.errors[0]?.message ?? 'Invalid input' };
   }
 
+  const { userId: authUserId, error: authError } = await requireAuthUserId(supabase);
+  if (authError || !authUserId) {
+    return { data: null, error: authError ?? 'You must be signed in to save plants.' };
+  }
+
+  if (userId !== authUserId) {
+    return { data: null, error: 'Session mismatch. Please sign out and sign in again.' };
+  }
+
   const { data, error } = await supabase
     .from('garden_placements')
     .insert({
-      user_id: userId,
+      user_id: authUserId,
       name: parsed.data.name,
       latitude: parsed.data.latitude,
       longitude: parsed.data.longitude,

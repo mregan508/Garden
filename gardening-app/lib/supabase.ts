@@ -3,13 +3,10 @@ import { readStaySignedInPreference, STAY_SIGNED_IN_PREF_KEY } from '@gardening/
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let client: ReturnType<typeof createNativeSupabaseClient> | null = null;
-let currentStaySignedIn: boolean | null = null;
 
 export function getSupabaseClient() {
   if (!client) {
-    const staySignedIn = currentStaySignedIn ?? true;
-    client = createNativeSupabaseClient({ staySignedIn });
-    currentStaySignedIn = staySignedIn;
+    client = createNativeSupabaseClient({ staySignedIn: true });
   }
   return client;
 }
@@ -24,17 +21,22 @@ export async function initNativeSupabaseClient(): Promise<
   ReturnType<typeof createNativeSupabaseClient>
 > {
   const staySignedIn = await loadNativeStaySignedInPreference();
-  return prepareNativeAuthSession(staySignedIn);
+  void AsyncStorage.setItem(STAY_SIGNED_IN_PREF_KEY, String(staySignedIn));
+
+  const supabase = getSupabaseClient();
+
+  // When "stay signed in" is off, do not restore a persisted session on app launch.
+  if (!staySignedIn) {
+    await supabase.auth.signOut();
+  }
+
+  return supabase;
 }
 
+/** Update stay-signed-in preference without recreating the Supabase client (avoids losing JWT). */
 export function prepareNativeAuthSession(staySignedIn: boolean) {
   void AsyncStorage.setItem(STAY_SIGNED_IN_PREF_KEY, String(staySignedIn));
-  if (client && currentStaySignedIn === staySignedIn) {
-    return client;
-  }
-  currentStaySignedIn = staySignedIn;
-  client = createNativeSupabaseClient({ staySignedIn });
-  return client;
+  return getSupabaseClient();
 }
 
 export { isNativeSupabaseConfigured } from '@gardening/shared/supabase/client-native';
