@@ -4,6 +4,12 @@ on:
   workflow_dispatch:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'gardening-app/**'
+      - 'packages/shared/**'
+      - '.github/workflows/build-android-apk.yml'
 
 jobs:
   build:
