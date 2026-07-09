@@ -47,5 +47,6 @@ cd gardening-app && npm start      # mobile (Expo)
 
 ## Workflow
 
+- **Never commit or push directly to `main`.** Always create a feature branch and open a PR — Michael merges to `main`.
 - Run `npm run verify` from the repo root before pushing.
-- Remember: pushing to `main` triggers both the web deploy **and** an Android APK release — there is no staging branch.
+- Remember: merging to `main` triggers both the web deploy **and** an Android APK release — there is no staging branch.
