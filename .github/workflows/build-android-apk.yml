@@ -43,77 +43,39 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN }}
-          # Play requires a higher versionCode on every upload; run_number only goes up.
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: npx expo prebuild --platform android --no-install
 
-      # Signing: Google Play needs every upload signed with the same "upload key".
-      # Store it in repo secrets (see docs/PLAY_STORE.md). Without those secrets the
-      # build falls back to a throwaway key, which is fine for sideloading but the
-      # resulting .aab will be rejected by Play.
-      - name: Set up signing key
-        env:
-          UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
-          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
-          UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
-          UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+      - name: Create release keystore
         run: |
-          KEYSTORE="$RUNNER_TEMP/garden-release.keystore"
-          if [ -n "$UPLOAD_KEYSTORE_BASE64" ]; then
-            echo "$UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
-            {
-              echo "SIGNING_STORE_PASSWORD=$UPLOAD_KEYSTORE_PASSWORD"
-              echo "SIGNING_KEY_ALIAS=$UPLOAD_KEY_ALIAS"
-              echo "SIGNING_KEY_PASSWORD=${UPLOAD_KEY_PASSWORD:-$UPLOAD_KEYSTORE_PASSWORD}"
-            } >> "$GITHUB_ENV"
-            echo "Using Play upload key from repository secrets."
-          else
-            echo "::warning::ANDROID_UPLOAD_KEYSTORE_BASE64 not set; signing with a throwaway key. The .aab cannot be uploaded to Google Play."
-            keytool -genkeypair -v \
-              -storetype PKCS12 \
-              -keystore "$KEYSTORE" \
-              -alias gardenmap \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Garden Map,O=Garden,C=US"
-            {
-              echo "SIGNING_STORE_PASSWORD=android"
-              echo "SIGNING_KEY_ALIAS=gardenmap"
-              echo "SIGNING_KEY_PASSWORD=android"
-            } >> "$GITHUB_ENV"
-          fi
-          echo "SIGNING_STORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+          keytool -genkeypair -v \
+            -storetype PKCS12 \
+            -keystore "$RUNNER_TEMP/garden-release.keystore" \
+            -alias gardenmap \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Garden Map,O=Garden,C=US"
 
-      - name: Build release APK and Play Store bundle (AAB)
+      - name: Build standalone release APK
         working-directory: gardening-app/android
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN }}
         run: |
-          ./gradlew assembleRelease bundleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file="$SIGNING_STORE_FILE" \
-            -Pandroid.injected.signing.store.password="$SIGNING_STORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$SIGNING_KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$SIGNING_KEY_PASSWORD"
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/garden-release.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=gardenmap \
+            -Pandroid.injected.signing.key.password=android
 
-      - name: Prepare artifacts
-        run: |
-          cp gardening-app/android/app/build/outputs/apk/release/app-release.apk garden-map.apk
-          cp gardening-app/android/app/build/outputs/bundle/release/app-release.aab garden-map.aab
+      - name: Prepare APK artifact
+        run: cp gardening-app/android/app/build/outputs/apk/release/app-release.apk garden-map.apk
 
-      - name: Upload APK workflow artifact
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v5
         with:
           name: garden-map-apk
           path: garden-map.apk
-          if-no-files-found: error
-
-      - name: Upload Play Store bundle artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: garden-map-aab
-          path: garden-map.aab
           if-no-files-found: error
 
       - name: Attach APK to GitHub release

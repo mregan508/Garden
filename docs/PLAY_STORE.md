@@ -4,72 +4,55 @@ What the repo already handles, and the steps only the owner can do (accounts,
 keys, store listing). Google changes Play Console requirements from time to time.
 If a step here doesn't match what the Console shows, follow the Console.
 
+## How builds work
+
+Play Store builds are made with **EAS** (Expo's cloud build service), the same way as
+the Protocols app. EAS creates and stores the app signing ("upload") key, so there is
+no key file to keep. The GitHub Actions workflow still builds the sideload APK for
+GitHub Releases. That APK is signed with a throwaway key and is **not** for Play.
+
 ## Already done in the repo
 
 | Play requirement | Where |
 |---|---|
 | Permanent package name `xyz.mregan.gardenmap` | `gardening-app/app.json` → `android.package` (**never change it after the first upload**) |
-| Increasing `versionCode` on every upload | CI passes `github.run_number` via `ANDROID_VERSION_CODE` (`gardening-app/app.config.js`) |
-| App bundle (`.aab`) format | CI artifact **garden-map-aab** (`.github/workflows/build-android-apk.yml`) |
-| Same signing key on every upload | CI reads the upload key from repo secrets (below) |
+| App bundle (`.aab`), increasing versionCode | `gardening-app/eas.json` `production` profile (`app-bundle`, `autoIncrement`, version kept by EAS) |
+| Shared package installs on EAS | `eas-build-post-install` script in `gardening-app/package.json` (EAS only installs the app folder; this also installs `packages/shared`) |
 | Privacy policy URL | https://mregan.xyz/garden/privacy |
-| In-app account deletion | "Delete account" under Sign out (mobile + web), backed by `delete_my_account()` in Supabase |
+| In-app account deletion | "Delete account" under Sign out (mobile + web), backed by `delete_my_account()` in Supabase (applied) |
 | Account-deletion web URL | https://mregan.xyz/garden/delete-account |
 
-## 1. Apply the database migration
+## 1. Create the Expo project
 
-`supabase/migrations/20261126120000_add_delete_my_account.sql` must be applied to the
-hosted project, or "Delete account" will fail. Apply it the same way as earlier migrations.
+On https://expo.dev (same account as Protocols): **Create a project**, with the slug
+**`gardening-app`** (it must match `slug` in `app.json`). Copy its **project ID** into
+`app.json` → `expo.extra.eas.projectId` (via a PR).
 
-## 2. Create a Google Play developer account
+## 2. Add the build environment variables on Expo
 
-https://play.google.com/console/signup: pick a **personal** account. There's a one-time
-registration fee, and Google verifies your identity.
+expo.dev → the Garden project → **Environment variables** → add each for the
+**production** environment (same values as `gardening-app/.env`):
 
-New personal accounts must run a **closed test** with a minimum number of testers who
-stay opted in for a minimum number of days before production is unlocked. The Console
-shows the current numbers. Line up friends/family with Android phones and Google accounts.
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN`
 
-## 3. Create the upload key (one time, on your computer)
+Without them the app builds but can't sign in or show the map.
 
-Needs Java's `keytool` (comes with Android Studio or any JDK):
+## 3. Build the Play bundle
 
-```bash
-keytool -genkeypair -v -storetype PKCS12 -keystore garden-upload.keystore -alias gardenmap-upload -keyalg RSA -keysize 2048 -validity 10000
-```
-
-Pick a strong password and **back up the keystore file and password** somewhere safe
-(a password manager). With Play App Signing (the default), Google holds the real
-signing key. If you lose this upload key, Google support can reset it, but it's a hassle.
-
-Then base64-encode it so it fits in a GitHub secret:
+From `gardening-app/` on your computer (after pulling `main`):
 
 ```bash
-base64 -w0 garden-upload.keystore > garden-upload.keystore.b64
+npx eas-cli@latest build --platform android --profile production
 ```
 
-(macOS: `base64 -i garden-upload.keystore -o garden-upload.keystore.b64`)
+The first time, answer **Yes** to "Generate a new Android Keystore?". Expo stores it.
+When the build finishes, download the `.aab` from the link it prints (or expo.dev → Builds).
 
-## 4. Add GitHub repository secrets
+## 4. Create the app in Play Console
 
-GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**:
-
-| Secret | Value |
-|---|---|
-| `ANDROID_UPLOAD_KEYSTORE_BASE64` | contents of `garden-upload.keystore.b64` |
-| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | the keystore password |
-| `ANDROID_UPLOAD_KEY_ALIAS` | `gardenmap-upload` |
-| `ANDROID_UPLOAD_KEY_PASSWORD` | the key password (same as keystore password if you didn't set a separate one) |
-
-Without these, CI still builds but signs with a throwaway key and logs a warning.
-That `.aab` will be rejected by Play.
-
-## 5. Build
-
-Actions → **Build Android APK** → Run workflow (or push to `main`). Download the
-**garden-map-aab** artifact (it's a zip containing `garden-map.aab`).
-
-## 6. Create the app in Play Console
+Use the same Play developer account as Protocols.
 
 1. **Create app**: name "Garden Map", App, Free.
 2. **App content** section (all required):
@@ -83,9 +66,9 @@ Actions → **Build Android APK** → Run workflow (or push to `main`). Download
    - **Account deletion URL:** `https://mregan.xyz/garden/delete-account`
 3. **Store listing:** short + full description, app icon (512×512 PNG), feature
    graphic (1024×500), and at least 2 phone screenshots.
-4. **Testing → Closed testing:** create a track, upload `garden-map.aab`, add testers'
-   emails, and send them the opt-in link. When the tester requirement is met,
-   apply for production access from the Dashboard.
+4. **Testing → Closed testing:** create a track, upload the `.aab`, add testers'
+   emails, and send them the opt-in link. Check the Dashboard for any testing
+   requirements before production access is available.
 
 ### Data safety answers (matching what the code does today)
 
@@ -106,8 +89,7 @@ Recheck these answers whenever you add an SDK or a new kind of data.
 
 ## Notes
 
-- Changing the package name means the Play app installs **alongside** old sideloaded
-  APKs instead of replacing them. Testers should uninstall the old "Garden Map" APK.
-- Each push to `main` still publishes the sideload APK to GitHub Releases. Uploading
-  to Play stays a manual step (download the AAB and upload it in the Console). It can
-  be automated later with a Play service account, after the first manual upload.
+- The Play app and the GitHub-release APK share a package name but are signed with
+  different keys, so one can't update the other. Uninstall the APK before installing
+  from Play.
+- Later Play releases: rerun the step 3 command, then upload the new `.aab`.
