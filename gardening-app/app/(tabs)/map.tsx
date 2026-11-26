@@ -62,12 +62,35 @@ type PendingPin = { latitude: number; longitude: number };
 
 export default function MapScreen() {
   const router = useRouter();
-  const { user, supabase, signOut } = useAuth();
+  const { user, supabase, signOut, deleteAccount } = useAuth();
   const mapboxToken = getMapboxAccessToken();
 
   const [placements, setPlacements] = useState<GardenPlacement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account and all of your plants, journal entries and reminders. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            const { error: deleteError } = await deleteAccount();
+            setDeletingAccount(false);
+            if (deleteError) {
+              Alert.alert('Could not delete account', deleteError);
+            }
+          },
+        },
+      ]
+    );
+  };
   const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
   const [cameraAnimation, setCameraAnimation] = useState(0);
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
@@ -464,9 +487,16 @@ export default function MapScreen() {
           <Text style={styles.headerTitle}>My Garden</Text>
           <Text style={styles.headerSubtitle}>{user?.email}</Text>
         </View>
-        <Pressable onPress={() => void signOut()}>
-          <Text style={styles.signOut}>Sign out</Text>
-        </Pressable>
+        <View style={styles.accountActions}>
+          <Pressable onPress={() => void signOut()}>
+            <Text style={styles.signOut}>Sign out</Text>
+          </Pressable>
+          <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount}>
+            <Text style={styles.deleteAccount}>
+              {deletingAccount ? 'Deleting…' : 'Delete account'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.mapWrapper}>
@@ -926,7 +956,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#064e3b' },
   headerSubtitle: { fontSize: 12, color: '#047857' },
+  accountActions: { alignItems: 'flex-end', gap: 6 },
   signOut: { color: '#059669', fontSize: 14 },
+  deleteAccount: { color: '#b91c1c', fontSize: 12 },
   mapWrapper: { flex: 1, position: 'relative' },
   map: { flex: 1 },
   weatherOverlay: {
