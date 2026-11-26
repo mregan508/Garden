@@ -40,12 +40,26 @@ const MAP_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
 type PendingPin = { latitude: number; longitude: number };
 
 export default function GardenMap() {
-  const { user, supabase, signOut } = useAuth();
+  const { user, supabase, signOut, deleteAccount } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? '';
 
   const [placements, setPlacements] = useState<GardenPlacement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Permanently delete your account and all of your plants, journal entries and reminders? This cannot be undone.'
+    );
+    if (!confirmed) return;
+    setDeletingAccount(true);
+    const { error: deleteError } = await deleteAccount();
+    setDeletingAccount(false);
+    if (deleteError) {
+      setError(`Could not delete account: ${deleteError}`);
+    }
+  };
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
   const [plantName, setPlantName] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -447,6 +461,14 @@ export default function GardenMap() {
             className="mt-2 block text-sm text-emerald-600 hover:underline"
           >
             Sign out
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDeleteAccount()}
+            disabled={deletingAccount}
+            className="mt-1 block text-xs text-red-700 hover:underline disabled:opacity-60"
+          >
+            {deletingAccount ? 'Deleting account…' : 'Delete account'}
           </button>
         </div>
 

@@ -69,7 +69,7 @@ npx vercel --prod
 
 ### Distribution model
 
-- **Not** on Google Play — sideload via GitHub Releases
+- Sideload via GitHub Releases; Google Play publishing steps are in [PLAY_STORE.md](PLAY_STORE.md)
 - CI builds a **standalone release APK** with the JS bundle embedded (no Metro required)
 - Web login page links to the release asset **`garden-map.apk`**
 

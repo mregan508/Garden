@@ -35,6 +35,8 @@ export interface AuthContextType {
   ) => Promise<{ error: { message: string } | null }>;
   signUp: (email: string, password: string, options?: SignUpOptions) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
+  /** Permanently deletes the signed-in user's account and all garden data. */
+  deleteAccount: () => Promise<{ error: string | null }>;
   clearError: () => void;
   supabase: SupabaseClient;
 }
@@ -162,6 +164,16 @@ export function AuthProvider({
     }
   };
 
+  const deleteAccount = async (): Promise<{ error: string | null }> => {
+    const { error: rpcError } = await supabase.rpc('delete_my_account');
+    if (rpcError) {
+      return { error: rpcError.message };
+    }
+    // The auth user no longer exists; clear the local session only.
+    await supabase.auth.signOut({ scope: 'local' });
+    return { error: null };
+  };
+
   const value: AuthContextType = {
     user,
     loading,
@@ -169,6 +181,7 @@ export function AuthProvider({
     signIn,
     signUp,
     signOut,
+    deleteAccount,
     clearError: () => setError(null),
     supabase,
   };
