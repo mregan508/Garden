@@ -25,7 +25,7 @@ GitHub Releases. That APK is signed with a throwaway key and is **not** for Play
 ## 1. Create the Expo project
 
 On https://expo.dev (same account as Protocols): **Create a project**, with the slug
-**`gardening-app`** (it must match `slug` in `app.json`). Copy its **project ID** into
+**`garden`** (it must match `slug` in `app.json`). Copy its **project ID** into
 `app.json` → `expo.extra.eas.projectId` (via a PR).
 
 ## 2. Add the build environment variables on Expo
