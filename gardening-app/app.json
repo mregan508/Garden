@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Garden Map",
-    "slug": "gardening-app",
+    "slug": "garden",
     "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
